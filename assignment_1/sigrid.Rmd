@@ -9,16 +9,14 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-
-```{r}
-test
-```
-
-
 ```{r}
 install.packages('pacman')
 library(pacman)
 pacman::p_load(tidyverse)
+```
+
+```{r}
+
 ```
 
 
