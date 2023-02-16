@@ -1,0 +1,38 @@
+---
+title: "sigrids doc"
+author: "Sigrid Agersnap Bom Nielsen"
+date: "2023-02-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+test
+```
+
+
+```{r}
+install.packages('pacman')
+library(pacman)
+pacman::p_load(tidyverse)
+```
+
+
+
+```{r}
+RA <- function(bias){
+  choice <- rbinom(1,1,bias)
+  return(choice)
+}
+df <- tibble()
+for(t in 1:120) {
+  choice <- RA(0.2)
+  temp <- tibble(t, choice)
+  df <- rbind(df, temp)
+}
+```
+
