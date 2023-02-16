@@ -2,7 +2,8 @@
 title: "assignment-1"
 author: "Helle"
 date: "2023-02-16"
-output: prettydoc::html_pretty:
+output: 
+  prettydoc::html_pretty:
     theme: cayman
     highlight: github
 
