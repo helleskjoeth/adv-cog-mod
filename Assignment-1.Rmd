@@ -2,7 +2,11 @@
 title: "assignment-1"
 author: "Helle"
 date: "2023-02-16"
-output: html_document
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+
 ---
 
 ```{r setup, include=FALSE}
@@ -12,6 +16,11 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r}
 library(tidyverse)
+
+set.seed(1997)
+
+
+
 ```
 
 
@@ -55,7 +64,7 @@ Our first strategy: win-shift-lose-stay
 
 ```{r}
 #Agent with a strong reaction to loosing, meaning it sticks more to the strategy of staying when losing. 
-wsls_agent_strong <- function(prev_choice, feedback, bias_lose, bias_win) {
+win_switch_agent <- function(prev_choice, feedback, bias_lose, bias_win) {
   if (feedback == 0) { #lose stay
     if(prev_choice == 0) { 
       choice = rbinom(1, 1, (1-bias_lose))}
@@ -72,16 +81,27 @@ wsls_agent_strong <- function(prev_choice, feedback, bias_lose, bias_win) {
 
 ```
 
-playing wsls_strong against our random agent 
+Initialisting biases
 
 ```{r}
 #random agent bias
 bot_bias <- 0.7
-bias_lose <- 0.9
-bias_win <- 0.7
+
+# strong tendency to stick with the strategy
+bias_lose_strong <- 0.9
+bias_win_strong <- 0.7
 
 
+#loss aversive wsls strategy
+bias_lose_weak <- 0.7
+bias_win_weak <- 0.9
 
+```
+
+playing wsls_strong against our random agent
+
+
+```{r}
 self <- rep(NA, trials)
 bot <- rep(NA, trials)
 
@@ -95,7 +115,7 @@ for (trial in 2:trials){
   if(self[trial-1] == bot[trial-1]) {
     feedback = 1
   } else {feedback = 0}
-  self[trial] <- wsls_agent_strong(prev_choice = self[trial-1], feedback, bias_lose, bias_win)
+  self[trial] <- win_switch_agent(prev_choice = self[trial-1], feedback, bias_lose_strong, bias_win_strong)
 }
 
 
@@ -104,7 +124,7 @@ print(self)
 ```
 ```{r}
 #Sanity check plot
-performance_df <- tibble(self, bot, trial = seq(trials), feedback = as.numeric(self==bot))
+performance_df_strong <- tibble(self, bot, trial = seq(trials), feedback = as.numeric(self==bot))
 
 performance_df %>% ggplot() +
   geom_line(color = "red", aes(trial, self)) +
@@ -120,15 +140,39 @@ performance_df %>% ggplot() +
 Plot the strong wsls 
 
 ```{r}
-performance_df <- tibble(self, bot, trial = seq(trials), feedback = as.numeric(self==bot))
+performance_df_strong <- tibble(self, bot, trial = seq(trials), feedback = as.numeric(self==bot))
 
-performance_df <- performance_df %>% 
-  mutate(cumulative_self = cumsum(feedback)/seq_along(feedback))
+performance_df_strong <- performance_df_strong %>% 
+  mutate(cumulative_self = cumsum(feedback)/seq_along(feedback), 
+         cumulative_bot = cumsum(1-feedback)/ seq_along(feedback))
 
+
+performance_df_strong %>% ggplot() +
+  geom_line(aes(trial, cumulative_self), color = "red")+
+  geom_line(aes(trial, cumulative_bot), color = "blue")
 
 
 ```
+Running the loss aversive wsls agents against the random bot
+
+```{r}
+self <- rep(NA, trials)
+bot <- rep(NA, trials)
+
+self[1] <- random_agent(0.5)
+
+for(trial in seq(trials)) {
+  bot[trial] <- random_agent(bot_bias)
+}
+
+for (trial in 2:trials){
+  if(self[trial-1] == bot[trial-1]) {
+    feedback = 1
+  } else {feedback = 0}
+  self[trial] <- win_switch_agent(prev_choice = self[trial-1], feedback, bias_lose_strong, bias_win_strong)
+}
 
 
-
+print(self)
+```
 
