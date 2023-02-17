@@ -2,10 +2,11 @@
 title: "assignment-1"
 author: "Helle"
 date: "2023-02-16"
-output:
-  word_document: default
-  html_document: default
-  pdf_document: default
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+
 ---
 
 ```{r setup, include=FALSE}
@@ -14,9 +15,11 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r}
+
 library(pacman, RcolorBrewer)
 library(plyr)
 p_load(ggplot2, tidyverse, scales, reshape2, pastecs, ggthemes, patchwork)
+
 
 ```
 
@@ -57,6 +60,7 @@ win_stay_agent <- function(prev_choice, feedback) {
 ```{r competing agent function}
 
 #Agent with a strong reaction to loosing, meaning it sticks more to the strategy of staying when losing. 
+
 win_shift_agent <- function(prev_choice, feedback, bias_lose, bias_win) {
   if (feedback == 0) { #lose stay
     if(prev_choice == 0) { 
@@ -208,6 +212,7 @@ bias_win_weak <- 0.9
 
 ```
 
+
 # AGENT TOURNAMENT 1: win-shift playng against random bot
 
 ## FIRST STRATEGY: playing win-shift-lose-stay with a strong reaction to loss (strong strategy) against the random agent 
@@ -279,6 +284,7 @@ sanity_check_df <- sim_vs_random(agents = 1,
                                 bias_lose = bias_lose_weak, 
                                 bias_win = bias_win_weak)
 
+
 sanity_weak_vs_random <- sanity_check_df %>% ggplot() +
   geom_line(color = "blue", aes(trial, self)) +
   geom_line(color = "red", aes(trial, bot)) +
@@ -315,6 +321,7 @@ performance_df <- sim_vs_wsls(agents = agents,
                               trials = trials,
                               bias_lose = bias_lose_strong, 
                               bias_win = bias_win_strong)
+
 
 ```
 
@@ -390,6 +397,8 @@ weak_vs_wsls<- ggplot(df_weak_vs_wsls, aes(trial, value)) +
   theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
 
 ```
+Running the loss aversive wsls agents against the random bot
+
 
 # PLOT DISPLAY
 
@@ -411,5 +420,8 @@ sanity_strong_vs_random + sanity_weak_vs_random
 
 # Tournament 2
 sanity_strong_vs_wsls + sanity_weak_vs_wsls
+```
+
+print(self)
 ```
 
