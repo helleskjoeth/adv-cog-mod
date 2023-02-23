@@ -27,3 +27,11 @@ to understand.
 The github repository has to be linked in the document, and has to include all the code
 for the strategy implementation, simulation of agents playing with those strategies and
 visualization of the plots.
+
+
+#### ASSIGNMENT 2
+In the assignment you need to produce a text (+ plots) document (linked to a github repo) in which you:
+* describe the models you are working on (you can re-use text from assignment 1, if relevant, it is no plagiarism!)
+* showcase a commented version of the stan model (what does each line do?)
+* describe a process of parameter recovery (why are you doing it?, how are you doing it?)
+* discuss the results: how many trials should be used at least to properly recover the parameters? What’s the role of priors? Add relevant plot(s).
