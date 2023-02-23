@@ -8,7 +8,7 @@ Contributing students are:
 
 ## Assignment Descriptions
 
-#### ASSIGMENT 1
+### ASSIGMENT 1
 In this assignment you have to create: i) a document (e.g. doc, word, etc), and ii) a
 github repository.
 
@@ -29,7 +29,7 @@ for the strategy implementation, simulation of agents playing with those strateg
 visualization of the plots.
 
 
-#### ASSIGNMENT 2
+### ASSIGNMENT 2
 In the assignment you need to produce a text (+ plots) document (linked to a github repo) in which you:
 * describe the models you are working on (you can re-use text from assignment 1, if relevant, it is no plagiarism!)
 * showcase a commented version of the stan model (what does each line do?)
