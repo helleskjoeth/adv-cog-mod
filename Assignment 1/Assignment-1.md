@@ -1,6 +1,6 @@
-assignment-1
+Assignment 1
 ================
-Helle
+Group 2
 2023-02-16
 
 ``` r
@@ -221,11 +221,22 @@ sanity_strong_vs_random <-sanity_check_df %>%
 ### Plot the strong win-switch vs random agent
 
 ``` r
-df_strong_vs_random <- plot_prep(performance_df)
+df_strong_vs_random_mean <- plot_prep(performance_df)
 
-strong_vs_random <- ggplot(df_strong_vs_random, aes(trial, value)) +
+df_strong_vs_random <- performance_df %>% 
+  select("agent", "trial", "cumulative_self", "cumulative_bot") %>% 
+  reshape2::melt(id.var = c("agent", "trial"), variable.name = "Player")
+
+strong_vs_random_mean <- ggplot(df_strong_vs_random_mean, aes(trial, value)) +
   geom_line(aes(color = Player)) +
   scale_y_continuous(limits = c(0, 1.0)) +
+  theme_stata() +
+  scale_color_gdocs() +
+  labs(title ="Strong win-shift vs. Random Agent", x = " Trial", y = "Mean cumulative rate") +
+  theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
+
+strong_vs_random <- ggplot(df_strong_vs_random, aes(trial, value)) +
+  geom_line(aes(color = Player)) + 
   theme_stata() +
   scale_color_gdocs() +
   labs(title ="Strong win-shift vs. Random Agent", x = " Trial", y = "Cumulative rate") +
@@ -262,11 +273,22 @@ sanity_weak_vs_random <- sanity_check_df %>% ggplot() +
 ### Plot the weak win-switch vs random agent
 
 ``` r
-df_weak_vs_random <- plot_prep(performance_df)
+df_weak_vs_random_mean <- plot_prep(performance_df)
 
-weak_vs_random <- ggplot(df_weak_vs_random, aes(trial, value)) +
+df_weak_vs_random <- performance_df %>% 
+  select("agent", "trial", "cumulative_self", "cumulative_bot") %>% 
+  reshape2::melt(id.var = c("agent", "trial"), variable.name = "Player")
+
+weak_vs_random_mean <- ggplot(df_weak_vs_random_mean, aes(trial, value)) +
   geom_line(aes(color = Player)) +
   scale_y_continuous(limits = c(0, 1.0)) +
+  theme_stata() +
+  scale_color_gdocs() +
+  labs(title ="Weak win-shift vs. Random Agent", x = " Trial", y = "Mean cumulative rate") +
+  theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
+
+weak_vs_random <- ggplot(df_weak_vs_random, aes(trial, value)) +
+  geom_line(aes(color = Player)) + 
   theme_stata() +
   scale_color_gdocs() +
   labs(title ="Weak win-shift vs. Random Agent", x = " Trial", y = "Cumulative rate") +
@@ -304,11 +326,22 @@ sanity_strong_vs_wsls <- sanity_check_df %>%
 ### Plot the strong wsls
 
 ``` r
-df_strong_vs_wsls <- plot_prep(performance_df)
+df_strong_vs_wsls_mean <- plot_prep(performance_df)
 
-strong_vs_wsls<- ggplot(df_strong_vs_wsls, aes(trial, value)) +
+df_strong_vs_wsls <- performance_df %>% 
+  select("agent", "trial", "cumulative_self", "cumulative_bot") %>% 
+  reshape2::melt(id.var = c("agent", "trial"), variable.name = "Player")
+
+strong_vs_wsls_mean<- ggplot(df_strong_vs_wsls_mean, aes(trial, value)) +
   geom_line(aes(color = Player)) +
   scale_y_continuous(limits = c(0, 1.0)) +
+  theme_stata() +
+  scale_color_gdocs() +
+  labs(title ="Strong win-shift vs. win-stay", x = " Trial", y = "Mean cumulative rate") +
+  theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
+
+strong_vs_wsls <- ggplot(df_strong_vs_wsls, aes(trial, value)) +
+  geom_line(aes(color = Player)) + 
   theme_stata() +
   scale_color_gdocs() +
   labs(title ="Strong win-shift vs. win-stay", x = " Trial", y = "Cumulative rate") +
@@ -344,11 +377,22 @@ sanity_weak_vs_wsls <- sanity_check_df %>%
 ### Plot the weak wsls
 
 ``` r
-df_weak_vs_wsls <- plot_prep(performance_df)
+df_weak_vs_wsls_mean <- plot_prep(performance_df)
 
-weak_vs_wsls<- ggplot(df_weak_vs_wsls, aes(trial, value)) +
+df_weak_vs_wsls <- performance_df %>% 
+  select("agent", "trial", "cumulative_self", "cumulative_bot") %>% 
+  reshape2::melt(id.var = c("agent", "trial"), variable.name = "Player")
+
+weak_vs_wsls_mean <- ggplot(df_weak_vs_wsls_mean, aes(trial, value)) +
   geom_line(aes(color = Player)) +
   scale_y_continuous(limits = c(0, 1.0)) +
+  theme_stata() +
+  scale_color_gdocs() +
+  labs(title ="Weak win-shift vs. win-stay", x = " Trial", y = "Mean cumulative rate") +
+  theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
+
+weak_vs_wsls <- ggplot(df_weak_vs_wsls, aes(trial, value)) +
+  geom_line(aes(color = Player)) + 
   theme_stata() +
   scale_color_gdocs() +
   labs(title ="Weak win-shift vs. win-stay", x = " Trial", y = "Cumulative rate") +
@@ -360,18 +404,34 @@ weak_vs_wsls<- ggplot(df_weak_vs_wsls, aes(trial, value)) +
 ## Plot all games
 
 ``` r
+# Grand mean 
 # Tournament 1
-strong_vs_random + weak_vs_random #+ strong_vs_wsls + weak_vs_wsls
+strong_vs_random_mean + weak_vs_random_mean #+ strong_vs_wsls_mean + weak_vs_wsls_mean
 ```
 
 ![](Assignment-1_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
 
 ``` r
 # Tournament 2
-strong_vs_wsls + weak_vs_wsls
+strong_vs_wsls_mean + weak_vs_wsls_mean
 ```
 
 ![](Assignment-1_files/figure-gfm/unnamed-chunk-3-2.png)<!-- -->
+
+``` r
+# Full distribution
+# Tournament 1
+strong_vs_random + weak_vs_random #+ strong_vs_wsls + weak_vs_wsls
+```
+
+![](Assignment-1_files/figure-gfm/unnamed-chunk-3-3.png)<!-- -->
+
+``` r
+# Tournament 2
+strong_vs_wsls + weak_vs_wsls
+```
+
+![](Assignment-1_files/figure-gfm/unnamed-chunk-3-4.png)<!-- -->
 
 ## Plot all sanity checks
 
