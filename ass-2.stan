@@ -1,32 +1,27 @@
-//
-// This Stan program defines a simple model, with a
-// vector of values 'y' modeled as normally distributed
-// with mean 'mu' and standard deviation 'sigma'.
-//
-// Learn more about model development with Stan at:
-//
-//    http://mc-stan.org/users/interfaces/rstan.html
-//    https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started
-//
-
 // The input data is a vector 'y' of length 'N'.
 data {
   int <lower = 1> t; //trial
   array[t] int choice;
-  array[t-1] int feedback //fb from previous trial - written in r. 
+  vector[t] feedback; //fb from previous trial 
 }
 
-// The parameters accepted by the model. Our model
-// accepts two parameters 'mu' and 'sigma'.
+// The parameters accepted by the model. 
 parameters {
-  real bias;
+  real  bias_win;
+  real  bias_lose;
   }
 
 // The model to be estimated. We model the output
-// 'y' to be normally distributed with mean 'mu'
-// and standard deviation 'sigma'.
-model {
-  target += normal_lpdf (bias| 0,1); // bias prior
-  target += bernoulli_logit_lpmf (c | bias * feedback); //model
-}
 
+
+transformed parameters {
+  
+  real bias;
+  bias = bias_win + bias_lose; // make in R so that if feedback = win, then bias_lose = 0 and vice versa
+  }
+
+model {
+  target += normal_lpdf (bias_win| 0,1); // bias_win prior
+  target += normal_lpdf (bias_lose| 0,1); // bias_lose prior
+  target += bernoulli_logit_lpmf (choice | bias * feedback); //model
+}
