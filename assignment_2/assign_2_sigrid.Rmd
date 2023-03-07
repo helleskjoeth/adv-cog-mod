@@ -179,6 +179,13 @@ getwd()
 
 #write.csv(recovery_df, "recovery_df.csv", row.names = FALSE) 
 
+testtest <- recovery_df %>% 
+  mutate(
+    bias_winEst_prop = exp(bias_winEst)/(1+exp(bias_winEst)),
+    bias_loseEst_prop = exp(bias_loseEst)/(1+exp(bias_loseEst))
+
+  )
+
 p1 <- ggplot(recovery_df, aes(bias_winTrue, bias_winEst)) + 
   geom_point(alpha = 0.1) + 
   geom_smooth() +
@@ -201,5 +208,42 @@ p2 <- ggplot(recovery_df, aes(bias_loseTrue, bias_loseEst)) +
     color = "red")
 
 p1 + p2
+
+# log odds scale? 
+# exp(logit)/(1+exp(logit)) 
+```
+
+```{r}
+testtest <- recovery_df %>% 
+  mutate(
+    bias_winEst_prop = exp(bias_winEst)/(1+exp(bias_winEst)),
+    bias_loseEst_prop = exp(bias_loseEst)/(1+exp(bias_loseEst))
+  )
+
+
+
+p1 <- ggplot(testtest, aes(bias_winTrue, bias_winEst_prop)) + 
+  geom_point(alpha = 0.1) + 
+  geom_smooth() +
+  theme_classic() + 
+  labs(title = "Bias_win") + 
+  geom_abline(
+    slope = 1, 
+    intercept = 0,
+    color = "red")
+# + facet_wrap(.~bias_loseTrue) # not sure it makes sense to plot with a facetwrap 
+
+p2 <- ggplot(testtest, aes(bias_loseTrue, bias_loseEst_prop)) +
+  geom_point(alpha = 0.1) + 
+  geom_smooth() +
+  theme_classic() + 
+  labs(title = "Bias_lose") +
+  geom_abline(
+    slope = 1, 
+    intercept = 0,
+    color = "red")
+
+p1 + p2
+
 ```
 
