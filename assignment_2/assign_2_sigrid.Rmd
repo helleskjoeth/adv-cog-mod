@@ -257,8 +257,108 @@ p3 + p4
 # plotting time!! win stay vs. random agent 
 # posterior + priors 
 ```{r}
+# bias win
+ggplot(test) +
+  geom_density(aes(bias_win_posterior), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_win_prior), fill="red", alpha=0.3) +
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Bias win")
 
+# bias lose
+ggplot(test) +
+  geom_density(aes(bias_lose_posterior), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_lose_prior), fill="red", alpha=0.3) +
+  xlab("Rate") +
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Bias lose")
+
+```
+Remember, win-shift!
+
+```{r}
+# prior predictions - when losing 
+ggplot(test) +
+  geom_histogram(aes(prior_preds_bias_lose_c0), color="darkblue", fill="blue", alpha=0.3) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Prior predicted next choice when the agent choses 0 and loses")
+
+
+ggplot(test) + 
+  geom_histogram(aes(prior_preds_bias_lose_c0), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(posterior_preds_bias_lose_c0), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choice when the agent choses 0 and loses")
+
+```
+So, the agent loses and has a stronger tendency to stay a their choice when losing. So the posterior distribution is pulled towards 0, which was the choice where the agent lost. 
+
+```{r}
+ggplot(test) +
+  geom_histogram(aes(prior_preds_bias_lose_c1), color="darkblue", fill="blue", alpha=0.3) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Prior predicted next choice when the agent choses 1 and loses")
+
+ggplot(test) + 
+  geom_histogram(aes(prior_preds_bias_lose_c1), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(posterior_preds_bias_lose_c1), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.9*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choice when the agent choses 1 and loses")
 
 
 ```
+But according to the above explanation this distribution should be pulled towards 1.... 
 
+```{r}
+# prior predictions - when winning
+ggplot(test) +
+  geom_histogram(aes(prior_preds_bias_win_c0), color="darkblue", fill="blue", alpha=0.3) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Prior predicted next choice when the agent choses 0 and wins")
+
+ggplot(test) + 
+  geom_histogram(aes(prior_preds_bias_win_c0), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(posterior_preds_bias_win_c0), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+ # geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choice when the agent choses 0 and wins")
+
+```
+
+
+```{r}
+ggplot(test) +
+  geom_histogram(aes(prior_preds_bias_win_c1), color="darkblue", fill="blue", alpha=0.3) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Posterior Density") +
+  theme_classic() +
+  labs(title = "Prior predicted next choice when the agent choses 1 and wins")
+
+
+ggplot(test) + 
+  geom_histogram(aes(prior_preds_bias_win_c1), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(posterior_preds_bias_win_c1), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+#  geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 120 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choice when the agent choses 1 and wins")
+
+```
+Priors looks good. 
