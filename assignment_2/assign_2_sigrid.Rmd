@@ -134,12 +134,21 @@ sim_d_and_fit <- function(seed, trials, bias_win, bias_lose) {
   )
 
   draws_df <- as_draws_df(samples$draws())
-  temp <- tibble(bias_winEst = draws_df$bias_win, 
-                 bias_loseEst = draws_df$bias_lose, 
+  #temp <- tibble(bias_winEst = draws_df$bias_win_posterior, 
+  #               bias_loseEst = draws_df$bias_lose_posterior, 
+    #             bias_winTrue = bias_win, 
+    #             bias_loseTrue = bias_lose
+    #             )
+  
+  temp <- tibble(bias_winEst = draws_df$bias_win_posterior, 
+                 bias_loseEst = draws_df$bias_lose_posterior, 
                  bias_winTrue = bias_win, 
                  bias_loseTrue = bias_lose)
+  temp2 <- draws_df[104:115]
   
-  return(temp)
+  df <- cbind(temp, temp2)
+  
+  return(df)
 }
 
 ```
@@ -160,8 +169,8 @@ model <- cmdstan_model(file,
 ```{r test fitting}
 test <- sim_d_and_fit(seed = 1000, trials = 100, bias_win = 0.7, bias_lose = 0.9)
 ```
-# Parameter recovery
 
+# Parameter recovery
 ```{r}
 pacman::p_load(tidyr, patchwork)
 plan(multisession, workers = 4)
@@ -175,7 +184,6 @@ temp <- tibble(unique(d)) %>%
   mutate(seed = 1000, trials = 120) # is seed what gives me 2000 estimated values pr combination of true values?? 
 
 recovery_df <- future_pmap_dfr(temp, sim_d_and_fit, .options = furrr_options(seed = TRUE))
-getwd()
 
 #write.csv(recovery_df, "recovery_df.csv", row.names = FALSE)
 ```
@@ -212,6 +220,7 @@ p1 + p2
 # converting log odds to probabilities the analogue way 
 # inv.logit() from the "boot" package does exactly the same 
 # pacman::p_load(boot)
+# in stan code: inv_logit()
 
 recovery_df <- recovery_df %>% 
   mutate(
@@ -221,7 +230,7 @@ recovery_df <- recovery_df %>%
 ```
 
 ```{r}
-p1 <- ggplot(recovery_df, aes(bias_winTrue, bias_winEst_prop)) + 
+p3 <- ggplot(recovery_df, aes(bias_winTrue, bias_winEst_prop)) + 
   geom_point(alpha = 0.1) + 
   geom_smooth() +
   theme_classic() + 
@@ -232,7 +241,7 @@ p1 <- ggplot(recovery_df, aes(bias_winTrue, bias_winEst_prop)) +
     color = "red")
 # + facet_wrap(.~bias_loseTrue) # not sure it makes sense to plot with a facetwrap 
 
-p2 <- ggplot(recovery_df, aes(bias_loseTrue, bias_loseEst_prop)) +
+p4 <- ggplot(recovery_df, aes(bias_loseTrue, bias_loseEst_prop)) +
   geom_point(alpha = 0.1) + 
   geom_smooth() +
   theme_classic() + 
@@ -242,7 +251,14 @@ p2 <- ggplot(recovery_df, aes(bias_loseTrue, bias_loseEst_prop)) +
     intercept = 0,
     color = "red")
 
-p1 + p2
+p3 + p4
+
+```
+# plotting time!! win stay vs. random agent 
+# posterior + priors 
+```{r}
+
+
 
 ```
 
