@@ -14,18 +14,30 @@ parameters {
 }
 
 transformed parameters {
+  vector[t] feedback_win;
+  vector[t] feedback_lose;
   vector[t] feedback;
+
   for (T in 1:t){
-    //if (T == 1) {
-    //  feedback[T] = binomial(0,1)
-    //  }
-    //if (T < t) {
-    if (self[T] == other[T]) {
+    if (self[T] == other[T] && self[T] == 0) {
+      feedback_win[T] = 1;
+      feedback_lose[T] = 0;
       feedback[T] = 1;
-      }
-    else {
+    }
+    else if (self[T] == other[T] && self[T] == 1){
+      feedback_win[T] = -1;
+      feedback_lose[T] = 0;
+      feedback[T] = 1;
+    }
+    else if (self[T] != other[T] && self[T] == 0) {
+      feedback_win[T] = 0; {}
+      feedback_lose[T] = -1;
       feedback[T] = 0;
-     // }
+    }
+    else if (self[T] != other[T] && self[T] == 1){
+      feedback_win[T] = 0;
+      feedback_lose[T] = 1;
+      feedback[T] = 0;
     }
   }
 }
@@ -35,12 +47,57 @@ model {
   target += normal_lpdf(bias_win | 0, 1); // prior of bias. lpdf scales the parameter to a log odds scale
   target += normal_lpdf(bias_lose | 0, 1); // prior of bias
   
+  target += bernoulli_logit_lpmf(choice | bias_lose*feedback_lose + bias_win*feedback_win);
+  
+}
+
+
+generated quantities {
+  real<lower = 0, upper = 1> bias_win_prior;
+  real<lower = 0, upper = 1> bias_lose_prior;
+  real<lower = 0, upper = 1> bias_win_posterior;
+  real<lower = 0, upper = 1> bias_lose_posterior;
+  
+  int<lower = 0, upper = t> prior_preds_bias_lose_c0;
+  int<lower = 0, upper = t> prior_preds_bias_win_c0;
+  int<lower = 0, upper = t> prior_preds_bias_lose_c1;
+  int<lower = 0, upper = t> prior_preds_bias_win_c1;
+  
+  int<lower = 0, upper = t> posterior_preds_bias_lose_c0;
+  int<lower = 0, upper = t> posterior_preds_bias_win_c0;
+  int<lower = 0, upper = t> posterior_preds_bias_lose_c1;
+  int<lower = 0, upper = t> posterior_preds_bias_win_c1;
+
+  
+  bias_win_prior = inv_logit(normal_rng(0,1));
+  bias_win_posterior = bias_win;
+  
+  bias_lose_prior = inv_logit(normal_rng(0,1));
+  bias_lose_posterior = bias_lose;
+  
   for (T in 2:t){
-    if (feedback[T-1] == 1) {
-      target += bernoulli_logit_lpmf(choice[T] | bias_win * feedback);
+    // if choice is 0 and the agent loses
+    if (choice[T] == 0 && feedback[T-1] == 0) {
+      prior_preds_bias_lose_c0 = binomial_rng(t, bias_lose_prior);
+      posterior_preds_bias_lose_c0 = binomial_rng(t, inv_logit(bias_lose));
+      }
+  
+  // if choice is 0 and the agent wins
+    if (choice[T] == 0 && feedback[T-1] == 1) {
+      prior_preds_bias_win_c0 = binomial_rng(t, bias_win_prior);
+      posterior_preds_bias_win_c0 = binomial_rng(t, inv_logit(bias_win));
+      }
+  
+  // if choice is 1 and the agent loses
+   if (choice[T] == 1 && feedback[T-1] == 0) {
+      prior_preds_bias_lose_c1 = binomial_rng(t, bias_lose_prior);
+      posterior_preds_bias_lose_c1 = binomial_rng(t, inv_logit(bias_lose));
     }
-    else {
-      target += bernoulli_logit_lpmf(choice[T] | bias_lose * feedback);
-    }
+  
+  // if choice is 1 and the agent wins
+    if (choice[T] == 1 && feedback[T-1] == 1) {
+     prior_preds_bias_win_c1 = binomial_rng(t, bias_win_prior);
+     posterior_preds_bias_win_c1 = binomial_rng(t, inv_logit(bias_win));
+     }
   }
 }
