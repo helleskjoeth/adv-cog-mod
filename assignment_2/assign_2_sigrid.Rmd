@@ -181,7 +181,7 @@ bias_lose = seq(0,1,by = .1)
 d <- crossing(bias_win, bias_lose)
 
 temp <- tibble(unique(d)) %>% 
-  mutate(seed = 1000, trials = 120) # is seed what gives me 2000 estimated values pr combination of true values?? 
+  mutate(seed = 1000, trials = 100) # is seed what gives me 2000 estimated values pr combination of true values?? 
 
 recovery_df <- future_pmap_dfr(temp, sim_d_and_fit, .options = furrr_options(seed = TRUE))
 
@@ -198,7 +198,8 @@ p1 <- ggplot(recovery_df, aes(bias_winTrue, bias_winEst)) +
   geom_abline(
     slope = 1, 
     intercept = 0,
-    color = "red")
+    color = "red") +
+  coord_cartesian(ylim = c(0,1))
 # + facet_wrap(.~bias_loseTrue) # not sure it makes sense to plot with a facetwrap 
 
 p2 <- ggplot(recovery_df, aes(bias_loseTrue, bias_loseEst)) +
@@ -209,7 +210,8 @@ p2 <- ggplot(recovery_df, aes(bias_loseTrue, bias_loseEst)) +
   geom_abline(
     slope = 1, 
     intercept = 0,
-    color = "red")
+    color = "red") + 
+  coord_cartesian(ylim = c(0,1))
 
 p1 + p2
 # looks weird, I suspect the scale of the estimated values needs to be fixed 
@@ -222,66 +224,43 @@ p1 + p2
 # pacman::p_load(boot)
 # in stan code: inv_logit()
 
-recovery_df <- recovery_df %>% 
-  mutate(
-    bias_winEst_prop = exp(bias_winEst)/(1+exp(bias_winEst)),
-    bias_loseEst_prop = exp(bias_loseEst)/(1+exp(bias_loseEst))
-  )
+#recovery_df <- recovery_df %>% 
+ # mutate(
+  #  bias_winEst_prop = exp(bias_winEst)/(1+exp(bias_winEst)),
+   # bias_loseEst_prop = exp(bias_loseEst)/(1+exp(bias_loseEst))
+  #)
 ```
 
-```{r}
-p3 <- ggplot(recovery_df, aes(bias_winTrue, bias_winEst_prop)) + 
-  geom_point(alpha = 0.1) + 
-  geom_smooth() +
-  theme_classic() + 
-  labs(title = "Bias_win") + 
-  geom_abline(
-    slope = 1, 
-    intercept = 0,
-    color = "red")
-# + facet_wrap(.~bias_loseTrue) # not sure it makes sense to plot with a facetwrap 
-
-p4 <- ggplot(recovery_df, aes(bias_loseTrue, bias_loseEst_prop)) +
-  geom_point(alpha = 0.1) + 
-  geom_smooth() +
-  theme_classic() + 
-  labs(title = "Bias_lose") +
-  geom_abline(
-    slope = 1, 
-    intercept = 0,
-    color = "red")
-
-p3 + p4
-
-```
 # plotting time!! win stay vs. random agent 
 # posterior + priors 
 ```{r}
 # bias win
 ggplot(test) +
-  geom_density(aes(bias_win_posterior), fill="blue", alpha=0.3) +
-  geom_density(aes(bias_win_prior), fill="red", alpha=0.3) +
+  geom_density(aes(bias_winEst), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_winTrue), fill="red", alpha=0.3) +
   xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
-  labs(title = "Bias win")
+  labs(title = "Bias win")+
+  coord_cartesian(xlim = c(0,1))
 
 # bias lose
 ggplot(test) +
-  geom_density(aes(bias_lose_posterior), fill="blue", alpha=0.3) +
-  geom_density(aes(bias_lose_prior), fill="red", alpha=0.3) +
+  geom_density(aes(bias_loseEst), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_loseTrue), fill="red", alpha=0.3) +
   xlab("Rate") +
   ylab("Posterior Density") +
   theme_classic() + 
-  labs(title = "Bias lose")
+  labs(title = "Bias lose") + 
+  coord_cartesian(xlim = c(0,1))
 
 ```
 Remember, win-shift!
 
 ```{r}
-# prior predictions - when losing 
+# prior predictions - when losing and choosing left/0
 ggplot(test) +
-  geom_histogram(aes(prior_preds_bias_lose_c0), color="darkblue", fill="blue", alpha=0.3) +
+  geom_histogram(aes(prior_preds_LL), color="darkblue", fill="blue", alpha=0.3) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Posterior Density") +
   theme_classic() + 
@@ -289,33 +268,35 @@ ggplot(test) +
 
 
 ggplot(test) + 
-  geom_histogram(aes(prior_preds_bias_lose_c0), color="lightblue", fill="blue", alpha=0.3, bins=90) +
-  geom_histogram(aes(posterior_preds_bias_lose_c0), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(prior_preds_LL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
   #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choices when the agent choses 0 and loses")
+  labs(title = "Prior and posterior predicted choices when the agent choses 0 and loses") + 
+  coord_cartesian(xlim = c(0,100))
 
 ```
 So, the agent loses and has a stronger tendency to stay a their choice when losing. So the posterior distribution is pulled towards 0, which was the choice where the agent lost. 
 
-```{r}
-ggplot(test) +
-  geom_histogram(aes(prior_preds_bias_lose_c1), color="darkblue", fill="blue", alpha=0.3) +
+```{r} 
+ggplot(test) + # when the agent loses and choses right
+  geom_histogram(aes(prior_preds_LR), color="darkblue", fill="blue", alpha=0.3) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Posterior Density") +
   theme_classic() + 
   labs(title = "Prior predicted next choice when the agent choses 1 and loses")
 
 ggplot(test) + 
-  geom_histogram(aes(prior_preds_bias_lose_c1), color="lightblue", fill="blue", alpha=0.3, bins=90) +
-  geom_histogram(aes(posterior_preds_bias_lose_c1), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(prior_preds_LR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
   #geom_point(x = 0.9*100, y = 0, color = "red", shape = 17, size = 5) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choices when the agent choses 1 and loses")
+  labs(title = "Prior and posterior predicted choices when the agent choses 1 and loses") + 
+  coord_cartesian(xlim = c(0,100))
 
 
 ```
@@ -331,13 +312,14 @@ ggplot(test) +
   labs(title = "Prior predicted next choices when the agent choses 0 and wins")
 
 ggplot(test) + 
-  geom_histogram(aes(prior_preds_bias_win_c0), color="lightblue", fill="blue", alpha=0.3, bins=90) +
-  geom_histogram(aes(posterior_preds_bias_win_c0), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(prior_preds_WL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
  # geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choices when the agent choses 0 and wins")
+  labs(title = "Prior and posterior predicted choices when the agent choses 0 and wins") + 
+  coord_cartesian(xlim = c(0,100))
 
 ```
 
@@ -352,13 +334,14 @@ ggplot(test) +
 
 
 ggplot(test) + 
-  geom_histogram(aes(prior_preds_bias_win_c1), color="lightblue", fill="blue", alpha=0.3, bins=90) +
-  geom_histogram(aes(posterior_preds_bias_win_c1), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(prior_preds_WR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
 #  geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choices when the agent choses 1 and wins")
+  labs(title = "Prior and posterior predicted choices when the agent choses 1 and wins") + 
+  coord_cartesian(xlim = c(0,100))
 
 ```
-Priors looks good. 
+
