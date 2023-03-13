@@ -144,7 +144,7 @@ sim_d_and_fit <- function(seed, trials, bias_win, bias_lose) {
                  bias_loseEst = draws_df$bias_lose_posterior, 
                  bias_winTrue = bias_win, 
                  bias_loseTrue = bias_lose)
-  temp2 <- draws_df[104:115]
+  temp2 <- draws_df[208:215]
   
   df <- cbind(temp, temp2)
   
@@ -295,7 +295,7 @@ ggplot(test) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choice when the agent choses 0 and loses")
+  labs(title = "Prior and posterior predicted choices when the agent choses 0 and loses")
 
 ```
 So, the agent loses and has a stronger tendency to stay a their choice when losing. So the posterior distribution is pulled towards 0, which was the choice where the agent lost. 
@@ -315,7 +315,7 @@ ggplot(test) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choice when the agent choses 1 and loses")
+  labs(title = "Prior and posterior predicted choices when the agent choses 1 and loses")
 
 
 ```
@@ -328,7 +328,7 @@ ggplot(test) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Posterior Density") +
   theme_classic() + 
-  labs(title = "Prior predicted next choice when the agent choses 0 and wins")
+  labs(title = "Prior predicted next choices when the agent choses 0 and wins")
 
 ggplot(test) + 
   geom_histogram(aes(prior_preds_bias_win_c0), color="lightblue", fill="blue", alpha=0.3, bins=90) +
@@ -337,7 +337,7 @@ ggplot(test) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choice when the agent choses 0 and wins")
+  labs(title = "Prior and posterior predicted choices when the agent choses 0 and wins")
 
 ```
 
@@ -348,7 +348,7 @@ ggplot(test) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Posterior Density") +
   theme_classic() +
-  labs(title = "Prior predicted next choice when the agent choses 1 and wins")
+  labs(title = "Prior predicted next choices when the agent choses 1 and wins")
 
 
 ggplot(test) + 
@@ -358,7 +358,7 @@ ggplot(test) +
   xlab("Predicted heads out of 120 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choice when the agent choses 1 and wins")
+  labs(title = "Prior and posterior predicted choices when the agent choses 1 and wins")
 
 ```
 Priors looks good. 

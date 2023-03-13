@@ -70,9 +70,10 @@ model {
   // priors
   target += normal_lpdf(bias_win | 0, 1); // prior of bias. lpdf scales the parameter to a log odds scale
   target += normal_lpdf(bias_lose | 0, 1); // prior of bias
-  
   // model 
+  for (T in 1:t){
   target += bernoulli_logit_lpmf(choice[T] | bias_win * feedback_win + bias_lose * feedback_lose);
+  }
 }
 
 // saving stuff from the model 
@@ -82,15 +83,15 @@ generated quantities {
   real<lower = 0, upper = 1> bias_win_posterior;
   real<lower = 0, upper = 1> bias_lose_posterior;
   
-  int<lower = 0, upper = t> prior_preds_bias_lose_c0;
-  int<lower = 0, upper = t> prior_preds_bias_win_c0;
-  int<lower = 0, upper = t> prior_preds_bias_lose_c1;
-  int<lower = 0, upper = t> prior_preds_bias_win_c1;
+  int<lower = 0, upper = t> prior_preds_LR;
+  int<lower = 0, upper = t> prior_preds_LL;
+  int<lower = 0, upper = t> prior_preds_WR;
+  int<lower = 0, upper = t> prior_preds_WL;
   
-  int<lower = 0, upper = t> posterior_preds_bias_lose_c0;
-  int<lower = 0, upper = t> posterior_preds_bias_win_c0;
-  int<lower = 0, upper = t> posterior_preds_bias_lose_c1;
-  int<lower = 0, upper = t> posterior_preds_bias_win_c1;
+  int<lower = 0, upper = t> post_preds_LR;
+  int<lower = 0, upper = t> post_preds_LL;
+  int<lower = 0, upper = t> post_preds_WR;
+  int<lower = 0, upper = t> post_preds_WL;
 
   
   bias_win_prior = inv_logit(normal_rng(0,1));
@@ -101,14 +102,14 @@ generated quantities {
 //  bias_lose_posterior = inv_logit(bias_lose);
   bias_lose_posterior = bias_lose;
   
-  prior_preds_LR = binomial_rng(t, (bias_lose_prior * 1 + bias_win_prior * 0))
-  prior_preds_LL = binomial_rng(t, (bias_lose_prior * -1 + bias_win_prior * 0))
-  prior_preds_WR = binomial_rng(t, (bias_win_prior * -1 + bias_lose_prior * 0))
-  prior_preds_WL = binomial_rng(t, (bias_win_prior * 1 + bias_lose_prior * 0))
+  prior_preds_LR = binomial_rng(t, (bias_lose_prior * 1 + bias_win_prior * 0));
+  prior_preds_LL = binomial_rng(t, (bias_lose_prior * -1 + bias_win_prior * 0));
+  prior_preds_WR = binomial_rng(t, (bias_win_prior * -1 + bias_lose_prior * 0));
+  prior_preds_WL = binomial_rng(t, (bias_win_prior * 1 + bias_lose_prior * 0));
 
-  post_preds_LR = binomial_rng(t, (bias_lose * 1 + bias_win * 0))
-  post_preds_LL = binomial_rng(t, (bias_lose * -1 + bias_win * 0))
-  post_preds_WR = binomial_rng(t, (bias_lose * 0 + bias_win * -1))
-  post_preds_WL = binomial_rng(t, (bias_lose * 0 + bias_win * 1))
+  post_preds_LR = binomial_rng(t, (bias_lose * 1 + bias_win * 0));
+  post_preds_LL = binomial_rng(t, (bias_lose * -1 + bias_win * 0));
+  post_preds_WR = binomial_rng(t, (bias_lose * 0 + bias_win * -1));
+  post_preds_WL = binomial_rng(t, (bias_lose * 0 + bias_win * 1));
 
 }
