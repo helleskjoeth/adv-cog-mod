@@ -228,10 +228,11 @@ p1 + p2
 # plotting time!! win stay vs. random agent 
 # posterior + priors 
 ```{r}
+pacman::p_load(boot)
 # bias win
 ggplot(test) +
   geom_density(aes(bias_winEst), fill="blue", alpha=0.3) +
-  geom_density(aes(bias_win_prior), fill="red", alpha=0.3) +
+  geom_density(aes(inv.logit(bias_win_prior)), fill="red", alpha=0.3) +
   xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
@@ -241,7 +242,7 @@ ggplot(test) +
 # bias lose
 ggplot(test) +
   geom_density(aes(bias_loseEst), fill="blue", alpha=0.3) +
-  geom_density(aes(bias_lose_prior), fill="red", alpha=0.3) +
+  geom_density(aes(inv.logit(bias_lose_prior)), fill="red", alpha=0.3) +
   xlab("Rate") +
   ylab("Posterior Density") +
   theme_classic() + 
@@ -252,35 +253,21 @@ ggplot(test) +
 Remember, win-shift! not sure the above plot makes sense? given the bias should change given the choice.. i.e., pull in different directions.
 
 ```{r}
-# prior predictions - when losing and choosing left/0
-ggplot(test) +
-  geom_histogram(aes(prior_preds_LL), color="darkblue", fill="blue", alpha=0.3) +
-  xlab("Predicted heads out of 120 trials") +
-  ylab("Posterior Density") +
-  theme_classic() + 
-  labs(title = "Prior predicted next choice when the agent choses 0 and loses")
-
+# prior and post predictions - when losing and choosing left/0
 
 ggplot(test) + 
   geom_histogram(aes(prior_preds_LL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
   geom_histogram(aes(post_preds_LL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
   #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
-  xlab("Predicted heads out of 120 trials") +
+  xlab("Predicted heads out of 100 trials") +
   ylab("Density") +
   theme_classic() + 
   labs(title = "Prior and posterior predicted choices when the agent choses 0 and loses") + 
   coord_cartesian(xlim = c(0,100))
-
 ```
 So, the agent loses and has a stronger tendency to stay a their choice when losing. So the posterior distribution is pulled towards 0, which was the choice where the agent lost. 
 
 ```{r} 
-ggplot(test) + # when the agent loses and choses right
-  geom_histogram(aes(prior_preds_LR), color="darkblue", fill="blue", alpha=0.3) +
-  xlab("Predicted heads out of 120 trials") +
-  ylab("Posterior Density") +
-  theme_classic() + 
-  labs(title = "Prior predicted next choice when the agent choses 1 and loses")
 
 ggplot(test) + 
   geom_histogram(aes(prior_preds_LR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
@@ -297,13 +284,7 @@ ggplot(test) +
 But according to the above explanation this distribution should be pulled towards 1.... 
 
 ```{r}
-# prior predictions - when winning
-ggplot(test) +
-  geom_histogram(aes(prior_preds_bias_win_c0), color="darkblue", fill="blue", alpha=0.3) +
-  xlab("Predicted heads out of 120 trials") +
-  ylab("Posterior Density") +
-  theme_classic() + 
-  labs(title = "Prior predicted next choices when the agent choses 0 and wins")
+# prior and post predictions - when winning
 
 ggplot(test) + 
   geom_histogram(aes(prior_preds_WL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
@@ -319,13 +300,6 @@ ggplot(test) +
 
 
 ```{r}
-ggplot(test) +
-  geom_histogram(aes(prior_preds_bias_win_c1), color="darkblue", fill="blue", alpha=0.3) +
-  xlab("Predicted heads out of 120 trials") +
-  ylab("Posterior Density") +
-  theme_classic() +
-  labs(title = "Prior predicted next choices when the agent choses 1 and wins")
-
 
 ggplot(test) + 
   geom_histogram(aes(prior_preds_WR), color="lightblue", fill="blue", alpha=0.3, bins=90) +

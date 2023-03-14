@@ -13,6 +13,8 @@ parameters {
   real bias_lose;
 }
 
+
+
 transformed parameters {
   vector[t] feedback_win;
   vector[t] feedback_lose;
@@ -42,15 +44,15 @@ model {
   target += normal_lpdf(bias_win | 0, 1); // prior of bias. lpdf scales the parameter to a log odds scale
   target += normal_lpdf(bias_lose | 0, 1); // prior of bias
   // model 
-  for (T in 1:t){
-  target += bernoulli_logit_lpmf(choice[T] | bias_win * feedback_win + bias_lose * feedback_lose);
-  }
+  //for (T in 1:t){
+  target += bernoulli_logit_lpmf(choice | bias_win * feedback_win + bias_lose * feedback_lose);
+  //}
 }
 
 // saving stuff from the model 
 generated quantities {
-  real<lower = 0, upper = 1> bias_win_prior;
-  real<lower = 0, upper = 1> bias_lose_prior;
+  real bias_win_prior; // no more limiting to 0-1 probability space
+  real bias_lose_prior;
   real<lower = 0, upper = 1> bias_win_posterior;
   real<lower = 0, upper = 1> bias_lose_posterior;
   
@@ -65,14 +67,12 @@ generated quantities {
   int<lower = 0, upper = t> post_preds_WL;
 
   
-  bias_win_prior = inv_logit(normal_rng(0,1));
+  bias_win_prior = normal_rng(0,1); // log-odds scale
   bias_win_posterior = inv_logit(bias_win); 
-  //bias_win_posterior = bias_win; 
 
-  bias_lose_prior = inv_logit(normal_rng(0,1));
+  bias_lose_prior = normal_rng(0,1); // log-odds scale
   bias_lose_posterior = inv_logit(bias_lose);
-  //bias_lose_posterior = bias_lose;
-  
+
   prior_preds_LR = binomial_rng(t, inv_logit(bias_lose_prior * 1 + bias_win_prior * 0));
   prior_preds_LL = binomial_rng(t, inv_logit(bias_lose_prior * -1 + bias_win_prior * 0));
   prior_preds_WR = binomial_rng(t, inv_logit(bias_win_prior * -1 + bias_lose_prior * 0));
