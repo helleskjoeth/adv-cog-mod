@@ -5,15 +5,6 @@ date: "2023-03-07"
 output: html_document
 ---
 
-
-
----
-title: "Stan model implementation"
-author: "Astrid Nørgaard Fonager"
-date: "2023-03-01"
-output: word_document
----
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -143,7 +134,10 @@ sim_d_and_fit <- function(seed, trials, bias_win, bias_lose) {
   temp <- tibble(bias_winEst = draws_df$bias_win_posterior, 
                  bias_loseEst = draws_df$bias_lose_posterior, 
                  bias_winTrue = bias_win, 
-                 bias_loseTrue = bias_lose)
+                 bias_loseTrue = bias_lose,
+                 bias_win_prior = draws_df$bias_win_prior,
+                 bias_lose_prior = draws_df$bias_win_prior
+                 )
   temp2 <- draws_df[208:215]
   
   df <- cbind(temp, temp2)
@@ -237,7 +231,7 @@ p1 + p2
 # bias win
 ggplot(test) +
   geom_density(aes(bias_winEst), fill="blue", alpha=0.3) +
-  geom_density(aes(bias_winTrue), fill="red", alpha=0.3) +
+  geom_density(aes(bias_win_prior), fill="red", alpha=0.3) +
   xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
@@ -247,7 +241,7 @@ ggplot(test) +
 # bias lose
 ggplot(test) +
   geom_density(aes(bias_loseEst), fill="blue", alpha=0.3) +
-  geom_density(aes(bias_loseTrue), fill="red", alpha=0.3) +
+  geom_density(aes(bias_lose_prior), fill="red", alpha=0.3) +
   xlab("Rate") +
   ylab("Posterior Density") +
   theme_classic() + 
@@ -255,7 +249,7 @@ ggplot(test) +
   coord_cartesian(xlim = c(0,1))
 
 ```
-Remember, win-shift!
+Remember, win-shift! not sure the above plot makes sense? given the bias should change given the choice.. i.e., pull in different directions.
 
 ```{r}
 # prior predictions - when losing and choosing left/0
