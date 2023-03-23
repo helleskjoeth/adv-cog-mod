@@ -203,12 +203,12 @@ sim_d_and_fit <- function(seed, trials, bias_win, bias_lose) {
   
   data <-  list(
     t = trials,
-    choice = lag(temp$self, 1),
+    choice = lead(temp$self, 1),
     self = temp$self,
     other = temp$bot
   )
   
-  data$choice[1] <- 0
+  data$choice[t] <- 0
 
   samples <- model$sample(
     data = data,
@@ -265,9 +265,9 @@ test <- sim_d_and_fit(seed = 1000, trials = 100, bias_win = 0.7, bias_lose = 0.9
 # plotting time!! win stay vs. random agent 
 # prior and posterior updates
 ```{r}
-pacman::p_load(boot)
+pacman::p_load(boot, ggpubr)
 # bias win
-ggplot(test) +
+p1 <- ggplot(test) +
   geom_density(aes(bias_winEst), fill="blue", alpha=0.3) +
   geom_density(aes(inv.logit(bias_win_prior)), fill="red", alpha=0.3) + # inv.logit bias_win_prior
   xlab("Rate") + # Tendency to choose 1 ??
@@ -279,7 +279,7 @@ ggplot(test) +
 
 
 # bias lose
-ggplot(test) +
+p2 <- ggplot(test) +
   geom_density(aes(bias_loseEst), fill="blue", alpha=0.3) +
   geom_density(aes(inv.logit(bias_lose_prior)), fill="red", alpha=0.3) + # inv.logit bias_lose_prior
   xlab("Rate") +
@@ -289,59 +289,74 @@ ggplot(test) +
   coord_cartesian(xlim = c(0,1)) + 
   geom_point(x = unique(test$bias_loseTrue), y = 0, color = "red", shape = 17, size = 5)
 
-
+temp = ggarrange(p1, p2)
+#annotate_figure(temp, fig.lab = "Prior-posterior update checks")
+temp
+ggsave("plots/model_pp_update.png", width = 1300, height = 700, units = 'px', dpi = 150)
+# 2000 1150
 ```
 Remember, win-shift! not sure the above plot makes sense? given the bias should change given the choice.. i.e., pull in different directions.
 
 ```{r}
 # prior and post predictions - when losing and choosing left/0
 
-ggplot(test) + 
+p1 <- ggplot(test) + 
   geom_histogram(aes(prior_preds_LL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
   geom_histogram(aes(post_preds_LL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
   #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
-  xlab("Predicted heads out of 100 trials") +
+  xlab("Predicted right (1) choices out of 100 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choices when the agent choses 0 and loses") + 
+  labs(title = "Choice after agent chose left (0) and lost") + 
   coord_cartesian(xlim = c(0,100))
-```
-So, the agent loses and has a stronger tendency to stay a their choice when losing. So the posterior distribution is pulled towards 0, which was the choice where the agent lost. 
 
-```{r} 
 
-ggplot(test) + 
+p2 <- ggplot(test) + 
   geom_histogram(aes(prior_preds_LR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
   geom_histogram(aes(post_preds_LR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
   #geom_point(x = 0.9*100, y = 0, color = "red", shape = 17, size = 5) +
-  xlab("Predicted heads out of 120 trials") +
+  xlab("Predicted right (1) choices out of 100 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choices when the agent choses 1 and loses") + 
+  labs(title = "Choice after agent chose right (1) and lost") + 
   coord_cartesian(xlim = c(0,100))
 
-
-```
-But according to the above explanation this distribution should be pulled towards 1.... 
-
-```{r}
 # prior and post predictions - when winning
 
-ggplot(test) + 
+p3 <- ggplot(test) + 
   geom_histogram(aes(prior_preds_WL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
   geom_histogram(aes(post_preds_WL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
  # geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
-  xlab("Predicted heads out of 120 trials") +
+  xlab("Predicted right (1) choices out of 100 trials") +
   ylab("Density") +
   theme_classic() + 
-  labs(title = "Prior and posterior predicted choices when the agent choses 0 and wins") + 
+  labs(title = "Choice after agent chose left (0) and won") + 
   coord_cartesian(xlim = c(0,100))
 
+p4 <- ggplot(test) + 
+  geom_histogram(aes(prior_preds_WR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+ # geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted right (1) choices out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Choice after agent chose right (1) and won") + 
+  coord_cartesian(xlim = c(0,100))
+
+
+
+ggarrange(p1, p2, p3, p4, common.legend = TRUE)
+
+#ggsave("plots/pp_predict.png", width = 1300, height = 600, units = 'px', dpi = 150)
+# 2000 1150
 ```
+So, the agent loses and has a stronger tendency to stay a their choice when losing. So the posterior distribution is pulled towards 0, which was the choice where the agent lost. 
+
+
+But according to the above explanation this distribution should be pulled towards 1.... 
 
 
 ```{r}
-
 ggplot(test) + 
   geom_histogram(aes(prior_preds_WR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
   geom_histogram(aes(post_preds_WR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
@@ -353,6 +368,93 @@ ggplot(test) +
   coord_cartesian(xlim = c(0,100))
 
 ```
+# Prior sensitivity check 
+
+```{r import model}
+## Specify where the model is
+file2 <- file.path("model1_prior_sensitivity.stan")
+model <- cmdstan_model(file2, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+
+```
+
+```{r}
+prior_mean_bias_win <- 0
+prior_sd_bias_win <- seq(0.1, 0.5, 0.1)
+prior_mean_bias_lose <- 0
+prior_sd_bias_lose <- seq(0.1, 0.5, 0.1)
+priors <-  tibble(
+  expand.grid(
+    tibble(
+      prior_mean_bias_win, prior_sd_bias_win, prior_mean_bias_lose, prior_sd_bias_lose)))
+
+```
+
+```{r}
+pacman::p_load(future, purrr, furrr)
+plan(multisession, workers = 4)
+
+sim_d_and_fit_prior_sensitivity <- function(
+    prior_mean_bias_win, prior_sd_bias_win, prior_mean_bias_lose, prior_sd_bias_lose) {
+    for (t in seq(100)) {
+    temp <-  sim_vs_random(agents = 1,
+                           trials = 100, 
+                           bias_lose = 0.9,
+                           bias_win = 0.7)
+    }
+  
+    data <-  list(
+    t = 100,
+    choice = lead(temp$self, 1),
+    self = temp$self,
+    other = temp$bot,
+    prior_mean_bias_win = prior_mean_bias_win,
+    prior_sd_bias_win = prior_sd_bias_win,
+    prior_mean_bias_lose = prior_mean_bias_lose,
+    prior_sd_bias_lose = prior_sd_bias_lose
+  )
+  
+  data$choice[100] <- 0 # change this!
+    
+    samples <- model$sample(
+      data = data,
+      seed = 1000,
+      chains = 1,
+      parallel_chains = 1,
+      threads_per_chain = 1,
+      iter_warmup = 1000,
+      iter_sampling = 2000,
+      refresh = 0,
+      max_treedepth = 20,
+      adapt_delta = 0.99
+    )
+    
+    draws_df <- as_draws_df(samples$draws())
+      temp <- tibble(
+                    bias_winEst = draws_df$bias_win_posterior,
+                    bias_loseEst = draws_df$bias_lose_posterior,
+                   # bias_winTrue = bias_win,
+                    #bias_loseTrue = bias_lose,
+                    bias_win_prior = draws_df$bias_win_prior,
+                    bias_lose_prior = draws_df$bias_lose_prior,
+                    prior_mean_bias_win = prior_mean_bias_win,
+                    prior_sd_bias_win = prior_sd_bias_win,
+                    prior_mean_bias_lose = prior_mean_bias_lose,
+                    prior_sd_bias_lose = prior_sd_bias_lose)
+
+  return(temp)
+
+}
+
+testtest <- sim_d_and_fit_prior_sensitivity(0,0.5,0,0.5)
+
+recovery_df <- future_pmap_dfr(priors, sim_d_and_fit_prior_sensitivity, .options = furrr_options(seed = TRUE))
+
+#write_csv(recovery_df, "simdata/W4_MemoryPriorSensitivity.csv")
+
+```
+
 
 # Parameter recovery
 ```{r}
