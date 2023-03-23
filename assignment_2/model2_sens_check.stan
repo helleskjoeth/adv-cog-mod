@@ -4,6 +4,8 @@ data {
   array[trials] int choice;
   array[trials] int other;
   array[trials] int self;
+  real prior_mean_RF;
+  real <lower = 0> prior_sd_RF;
 }
 
 
@@ -24,7 +26,7 @@ transformed parameters {
 }
 
 model {
-  target += normal_lpdf(rule_following | 0, 1); // prior of bias
+  target += normal_lpdf(rule_following | prior_mean_RF, prior_sd_RF); // prior of bias
   
   target += bernoulli_logit_lpmf(choice | rule_following * feedback);
 }
@@ -43,7 +45,7 @@ generated quantities {
   int<lower = 0, upper = trials> post_preds_WR;
   int<lower = 0, upper = trials> post_preds_WL;
   
-  rule_following_prior = normal_rng(0, 1);
+  rule_following_prior = normal_rng(prior_mean_RF, prior_sd_RF);
   rule_following_posterior = inv_logit(rule_following); 
   
   prior_preds_LR = binomial_rng(trials, inv_logit(rule_following_prior * 1));

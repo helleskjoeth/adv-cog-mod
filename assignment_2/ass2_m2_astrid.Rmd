@@ -18,7 +18,8 @@ pacman::p_load(tidyverse,
         cmdstanr,
         brms, tidybayes, future, purrr, furrr, prettydoc,
         tidyr,
-        patchwork)
+        patchwork,
+        ggpubr)
 ```
 
 # FUNCTIONS
@@ -104,12 +105,12 @@ sim_d_and_fit <- function(seed, trials, rule_following) {
   
   data <-  list(
     trials = trials,
-    choice = lag(temp$self, 1),
+    choice = lead(temp$self, 1),
     self = temp$self,
     other = temp$bot
   )
   
-  data$choice[1] <- 0
+  data$choice[t] <- 0
 
   samples <- model$sample(
     data = data,
@@ -127,7 +128,15 @@ sim_d_and_fit <- function(seed, trials, rule_following) {
   draws_df <- as_draws_df(samples$draws())
   df <- tibble(rule_followingEst = draws_df$rule_following_posterior,
                rule_following_prior = draws_df$rule_following_prior,
-               rule_followingTrue = rule_following)
+               rule_followingTrue = rule_following,
+               prior_preds_LR = draws_df$prior_preds_LR,
+               prior_preds_LL = draws_df$prior_preds_LL,
+               prior_preds_WR = draws_df$prior_preds_WR,
+               prior_preds_WL = draws_df$prior_preds_WL,
+               post_preds_LR = draws_df$post_preds_LR,
+               post_preds_LL = draws_df$post_preds_LL,
+               post_preds_WR = draws_df$post_preds_WR,
+               post_preds_WL = draws_df$post_preds_WL)
   
   return(df)
 }
@@ -162,6 +171,11 @@ df <- tibble(rule_following) %>%
 recovery_df <- future_pmap_dfr(df, sim_d_and_fit, .options = furrr_options(seed = TRUE))
 ```
 
+```{r}
+# fitting a model
+test <- sim_d_and_fit(seed = 100, trials = 100, rule_following = .8)
+```
+
 
 ```{r}
 
@@ -186,6 +200,57 @@ ggplot(recovery_df, aes(rule_followingTrue, rule_followingEst)) +
     color = "red") +
   coord_cartesian(ylim = c(0,1))
 ```
+
+## prior-posterior predictions
+```{r}
+# predictions when loosing
+p1 <- ggplot(test) + 
+  geom_histogram(aes(prior_preds_LL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted right (1) choices out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Choice after agent chose left (0) and lost") + 
+  coord_cartesian(xlim = c(0,100))
+
+p2 <- ggplot(test) + 
+  geom_histogram(aes(prior_preds_LR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.9*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted right (1) choices out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Choice after agent chose right (1) and lost") + 
+  coord_cartesian(xlim = c(0,100))
+
+
+# predictions when winning
+p3 <- ggplot(test) + 
+  geom_histogram(aes(prior_preds_WL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+ # geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted right (1) choices out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Choice after agent chose left (0) and won") + 
+  coord_cartesian(xlim = c(0,100))
+
+p4 <- ggplot(test) + 
+  geom_histogram(aes(prior_preds_WR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+ # geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted right (1) choices out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Choice after agent chose right (1) and won") + 
+  coord_cartesian(xlim = c(0,100))
+ggarrange(p1, p2, p3, p4, common.legend = TRUE)
+
+# ggsave("pp_predict.png", width = 1300, height = 600, units = 'px', dpi = 150)
+
+```
+
 
 
 
