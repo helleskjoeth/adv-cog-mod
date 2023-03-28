@@ -97,7 +97,7 @@ sim_vs_random <- function(agents, trials, bias_lose, bias_win){
 
 ```{r simulation and fitting function}
 
-sim_d_and_fit <- function(seed, trials, bias_win, bias_lose) {
+sim_d_and_fit <- function(seed, trials, bias_win, bias_lose, clean = TRUE) {
   for (t in seq(trials)) {
     temp <-  sim_vs_random(agents = 1,
                            trials = trials, 
@@ -107,12 +107,12 @@ sim_d_and_fit <- function(seed, trials, bias_win, bias_lose) {
   
   data <-  list(
     t = trials,
-    choice = lag(temp$self, 1),
+    choice = lead(temp$self, 1),
     self = temp$self,
     other = temp$bot
   )
   
-  data$choice[1] <- 0
+  data$choice[t] <- 0
 
   samples <- model$sample(
     data = data,
@@ -126,14 +126,30 @@ sim_d_and_fit <- function(seed, trials, bias_win, bias_lose) {
     max_treedepth = 20,
     adapt_delta = 0.99,
   )
-
-  draws_df <- as_draws_df(samples$draws())
-  temp <- tibble(bias_winEst = draws_df$bias_win, 
-                 bias_loseEst = draws_df$bias_lose, 
-                 bias_winTrue = bias_win, 
-                 bias_loseTrue = bias_lose)
   
-  return(temp)
+  
+  if(clean == TRUE) {
+    draws_df <- as_draws_df(samples$draws())
+    df <- tibble(bias_winEst = draws_df$bias_win_posterior, 
+                 bias_loseEst = draws_df$bias_lose_posterior, 
+                 bias_winTrue = bias_win, 
+                 bias_loseTrue = bias_lose,
+                 prior_preds_LR = draws_df$prior_preds_LR,
+                 prior_preds_LL = draws_df$prior_preds_LL,
+                 prior_preds_WR = draws_df$prior_preds_WR,
+                 prior_preds_WL = draws_df$prior_preds_WL,
+                 post_preds_LR = draws_df$post_preds_LR,
+                 post_preds_LL = draws_df$post_preds_LL,
+                 post_preds_WR = draws_df$post_preds_WR,
+                 post_preds_WL = draws_df$post_preds_WL)
+  
+    return(df)
+  }
+  
+  else if(clean == FALSE){
+    return(samples)
+  }
+
 }
 
 ```
@@ -157,3 +173,35 @@ model <- cmdstan_model(file,
 test <- sim_d_and_fit(seed = 1000, trials = 100, bias_win = 0.7, bias_lose = 0.9)
 ```
 
+# MODEL QUALITY
+
+## Sampling issues
+
+```{r check for sampling issues}
+
+#Fit 
+samples <- sim_d_and_fit(seed = 1000, trials = 100, bias_win = 0.7, bias_lose = 0.9, clean = FALSE)
+
+# Diagnose
+samples$cmdstan_diagnose()
+
+# Plot hairy caterpillars
+draws_df <- as_draws_df(samples$draws())
+
+ggplot(draws_df, aes(.iteration, bias_win, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Bias_win") +
+  theme_classic()
+
+ggplot(draws_df, aes(.iteration, bias_lose, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Bias_lose") +
+  theme_classic()
+
+# not correlated
+ggplot(draws_df, aes(bias_lose, bias_win, group = .chain, color=.chain)) + 
+  geom_point(alpha= 0.3) +
+  labs(title = "Bias_win") +
+  theme_classic()
+
+```
