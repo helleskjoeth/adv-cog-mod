@@ -471,7 +471,7 @@ temp <- tibble(unique(d)) %>%
 
 recovery_df <- future_pmap_dfr(temp, sim_d_and_fit, .options = furrr_options(seed = TRUE))
 
-#write.csv(recovery_df, "recovery_df.csv", row.names = FALSE)
+#write.csv(recovery_df, "recovery_df_sens.csv", row.names = FALSE)
 ```
 
 

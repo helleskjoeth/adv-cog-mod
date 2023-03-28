@@ -19,7 +19,8 @@ pacman::p_load(tidyverse,
         brms, tidybayes, future, purrr, furrr, prettydoc,
         tidyr,
         patchwork,
-        ggpubr)
+        ggpubr,
+        gtools)
 ```
 
 # FUNCTIONS
@@ -155,6 +156,11 @@ model <- cmdstan_model(file,
 
 ```
 
+```{r}
+# fitting a model
+test <- sim_d_and_fit(seed = 100, trials = 100, rule_following = .8)
+```
+
 
 # PLOTTING
 
@@ -172,22 +178,19 @@ recovery_df <- future_pmap_dfr(df, sim_d_and_fit, .options = furrr_options(seed 
 ```
 
 ```{r}
-# fitting a model
-test <- sim_d_and_fit(seed = 100, trials = 100, rule_following = .8)
-```
-
-
-```{r}
-
+# Prior-posterior update
 ggplot(test) +
   geom_density(aes(rule_followingEst), fill="blue", alpha=0.3) +
-  geom_density(aes(rule_following_prior), fill="red", alpha=0.3) +
-  xlab("Bias towards rule following") + 
+  geom_density(aes(inv.logit(rule_following_prior)), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rule Following") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
-  labs(title = "Prior-Posterior update check")
+  labs(title = "Prior-posterior Update")+
+  coord_cartesian(xlim = c(0,1)) + 
+  geom_point(x = unique(test$rule_followingTrue), y = 0, color = "red", shape = 17, size = 5)
 ```
 
+## parameter recovery
 ```{r}
 ggplot(recovery_df, aes(rule_followingTrue, rule_followingEst)) + 
   geom_point(alpha = 0.1) + 
@@ -200,6 +203,7 @@ ggplot(recovery_df, aes(rule_followingTrue, rule_followingEst)) +
     color = "red") +
   coord_cartesian(ylim = c(0,1))
 ```
+
 
 ## prior-posterior predictions
 ```{r}
@@ -245,14 +249,177 @@ p4 <- ggplot(test) +
   theme_classic() + 
   labs(title = "Choice after agent chose right (1) and won") + 
   coord_cartesian(xlim = c(0,100))
+
 ggarrange(p1, p2, p3, p4, common.legend = TRUE)
 
 # ggsave("pp_predict.png", width = 1300, height = 600, units = 'px', dpi = 150)
 
 ```
 
+# Prior sensitivity check 
+
+```{r import model}
+## Specify where the model is
+file2 <- file.path("model2_sens_check.stan")
+model <- cmdstan_model(file2, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+```
+
+```{r}
+prior_mean_RF <- 0
+prior_sd_RF <- seq(.1, 1, .1)
+
+priors <-  tibble(
+  expand.grid(
+    tibble(
+      prior_mean_RF, prior_sd_RF)))
+```
+
+```{r}
+sim_d_and_fit_prior_sensitivity <- function(
+    prior_mean_RF, prior_sd_RF) {
+    for (t in seq(100)) {
+      temp <-  sim_vs_random(agents = 1,
+                           trials = 100, 
+                           rule_following = .8)
+    }
+  
+    data <-  list(
+    trials = 100,
+    choice = lead(temp$self, 1),
+    self = temp$self,
+    other = temp$bot,
+    prior_mean_RF = prior_mean_RF,
+    prior_sd_RF = prior_sd_RF
+  )
+  
+  data$choice[100] <- 0 # change this!
+    
+    samples <- model$sample(
+      data = data,
+      seed = 1000,
+      chains = 1,
+      parallel_chains = 1,
+      threads_per_chain = 1,
+      iter_warmup = 1000,
+      iter_sampling = 2000,
+      refresh = 0,
+      max_treedepth = 20,
+      adapt_delta = 0.99
+      )
+    
+    draws_df <- as_draws_df(samples$draws())
+      temp <- tibble(
+                    rule_followingEst = draws_df$rule_following_posterior,
+                    rule_following_prior = draws_df$rule_following_prior,
+                    rule_followingTrue = draws_df$rule_following,
+                    prior_mean_RF = prior_mean_RF,
+                    prior_sd_RF = prior_sd_RF,
+                    )
+                    
+  return(temp)
+}
+
+```
 
 
+# fitting the model
+```{r}
+pacman::p_load(tidyr, patchwork)
+plan(multisession, workers = 4)
 
+recovery_df <- future_pmap_dfr(priors, sim_d_and_fit_prior_sensitivity, .options = furrr_options(seed = TRUE))
 
+#write.csv(recovery_df, "recovery_df_sens.csv", row.names = FALSE)
+```
+
+## prior sensitivity plot
+```{r}
+ggplot(recovery_df, aes(prior_sd_RF, rule_followingEst)) +
+  geom_point(alpha = 0.1) +
+  geom_hline(yintercept = 0.8, color = "red") +
+  geom_smooth(method = lm) +
+  theme_classic() +
+  labs(title = "Prior sensitivity check")
+```
+
+#### Cattarpillar plots ####
+```{r simulation and fitting function}
+
+sim_d_and_fit <- function(seed, trials, rule_following, clean = T) {
+  for (t in seq(trials)) {
+    temp <-  sim_vs_random(agents = 1,
+                           trials = trials, 
+                           rule_following = rule_following)
+  }
+  
+  data <-  list(
+    trials = trials,
+    choice = lead(temp$self, 1),
+    self = temp$self,
+    other = temp$bot
+  )
+  
+  data$choice[t] <- 0
+
+  samples <- model$sample(
+    data = data,
+    seed = seed,
+    chains = 1,
+    parallel_chains = 1,
+    threads_per_chain = 1,
+    iter_warmup = 1000,
+    iter_sampling = 2000,
+    refresh = 0,
+    max_treedepth = 20,
+    adapt_delta = 0.99,
+  )
+if(clean == T) {
+  draws_df <- as_draws_df(samples$draws())
+  df <- tibble(rule_followingEst = draws_df$rule_following_posterior,
+               rule_following_prior = draws_df$rule_following_prior,
+               rule_followingTrue = rule_following,
+               prior_preds_LR = draws_df$prior_preds_LR,
+               prior_preds_LL = draws_df$prior_preds_LL,
+               prior_preds_WR = draws_df$prior_preds_WR,
+               prior_preds_WL = draws_df$prior_preds_WL,
+               post_preds_LR = draws_df$post_preds_LR,
+               post_preds_LL = draws_df$post_preds_LL,
+               post_preds_WR = draws_df$post_preds_WR,
+               post_preds_WL = draws_df$post_preds_WL)
+  
+  return(df)
+}
+  else if(clean ==F) {
+    return(samples)
+  }
+}
+
+```
+
+# FITTING THE MODEL
+
+```{r import model}
+file <- file.path("model2.stan")
+model <- cmdstan_model(file, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+```
+
+## Sampling issues
+
+```{r check for sampling issues}
+#Fit 
+samples <- sim_d_and_fit(seed = 1000, trials = 100, rule_following = .8, clean = FALSE)
+# Diagnose
+samples$cmdstan_diagnose()
+# Plot hairy caterpillars
+draws_df <- as_draws_df(samples$draws())
+ggplot(draws_df, aes(.iteration, rule_following, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Rule_following") +
+  theme_classic()
+
+```
 
