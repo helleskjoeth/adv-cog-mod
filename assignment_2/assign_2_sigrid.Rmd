@@ -381,9 +381,9 @@ model <- cmdstan_model(file2,
 
 ```{r}
 prior_mean_bias_win <- 0
-prior_sd_bias_win <- seq(0.1, 0.5, 0.1)
+prior_sd_bias_win <- seq(0.1, 1, 0.1)
 prior_mean_bias_lose <- 0
-prior_sd_bias_lose <- seq(0.1, 0.5, 0.1)
+prior_sd_bias_lose <- seq(0.1, 1, 0.1)
 priors <-  tibble(
   expand.grid(
     tibble(
@@ -392,20 +392,20 @@ priors <-  tibble(
 ```
 
 ```{r}
-pacman::p_load(future, purrr, furrr)
+#pacman::p_load(future, purrr, furrr)
 plan(multisession, workers = 4)
 
 sim_d_and_fit_prior_sensitivity <- function(
-    prior_mean_bias_win, prior_sd_bias_win, prior_mean_bias_lose, prior_sd_bias_lose) {
-    for (t in seq(100)) {
+    prior_mean_bias_win, prior_sd_bias_win, prior_mean_bias_lose, prior_sd_bias_lose, trials = 100) {
+    for (t in seq(trials)) {
     temp <-  sim_vs_random(agents = 1,
-                           trials = 100, 
+                           trials = trials, 
                            bias_lose = 0.9,
                            bias_win = 0.7)
     }
   
     data <-  list(
-    t = 100,
+    t = trials,
     choice = lead(temp$self, 1),
     self = temp$self,
     other = temp$bot,
@@ -415,7 +415,7 @@ sim_d_and_fit_prior_sensitivity <- function(
     prior_sd_bias_lose = prior_sd_bias_lose
   )
   
-  data$choice[100] <- 0 # change this!
+  data$choice[trials] <- 0 # change this!
     
     samples <- model$sample(
       data = data,
@@ -447,11 +447,34 @@ sim_d_and_fit_prior_sensitivity <- function(
 
 }
 
-testtest <- sim_d_and_fit_prior_sensitivity(0,0.5,0,0.5)
+#testtest <- sim_d_and_fit_prior_sensitivity(0,0.5,0,0.5)
 
-recovery_df <- future_pmap_dfr(priors, sim_d_and_fit_prior_sensitivity, .options = furrr_options(seed = TRUE))
+sensitivity_check <- future_pmap_dfr(priors, sim_d_and_fit_prior_sensitivity, .options = furrr_options(seed = TRUE))
 
-#write_csv(recovery_df, "simdata/W4_MemoryPriorSensitivity.csv")
+#write_csv(sensitivity_check, "prior_sensitivity_check/m1_prior_sensitivity_100_trials_0.2-1.csv")
+
+```
+
+```{r prior sensitivity plot}
+# bias win 
+recovery_df %>% 
+  ggplot() +
+  aes(prior_sd_bias_win, bias_winEst) +
+  geom_point(alpha = 0.1) + 
+  geom_hline(yintercept = 0.7, color = "red") + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(.~prior_sd_bias_lose) + 
+  theme_classic()
+
+# bias lose 
+recovery_df %>% 
+  ggplot() +
+  aes(prior_sd_bias_lose, bias_loseEst) +
+  geom_point(alpha = 0.1) + 
+  geom_hline(yintercept = 0.7, color = "red") + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(.~prior_sd_bias_win) + 
+  theme_classic()
 
 ```
 
