@@ -62,6 +62,7 @@ generated quantities {
   real<lower = 0, upper = 1> bias_win_posterior;
   real<lower = 0, upper = 1> bias_lose_posterior;
   
+  //LR= lost-right, LL= lost-left, WR = won-right, WL = won-left 
   int<lower = 0, upper = t> prior_preds_LR;
   int<lower = 0, upper = t> prior_preds_LL;
   int<lower = 0, upper = t> prior_preds_WR;
@@ -79,11 +80,13 @@ generated quantities {
   bias_win_posterior = inv_logit(bias_win); // probability space
   bias_lose_posterior = inv_logit(bias_lose); // probability space
 
+  // prior predictions
   prior_preds_LR = binomial_rng(t, inv_logit(bias_lose_prior * 1 + bias_win_prior * 0));
   prior_preds_LL = binomial_rng(t, inv_logit(bias_lose_prior * -1 + bias_win_prior * 0));
   prior_preds_WR = binomial_rng(t, inv_logit(bias_win_prior * -1 + bias_lose_prior * 0));
   prior_preds_WL = binomial_rng(t, inv_logit(bias_win_prior * 1 + bias_lose_prior * 0));
-
+  
+  // posterior predictions
   post_preds_LR = binomial_rng(t, inv_logit(bias_lose * 1 + bias_win * 0));
   post_preds_LL = binomial_rng(t, inv_logit(bias_lose * -1 + bias_win * 0));
   post_preds_WR = binomial_rng(t, inv_logit(bias_lose * 0 + bias_win * -1));
