@@ -43,24 +43,25 @@ self1 <- round(inv_logit_scaled(rnorm(trials, 0.3, 0.5))*9, 0)
 
 # make other based on feedback sampling 
 other_f <- function(trials, self1_var){
+  # make empty lists
   feedback <- rep(NA, trials)
   other <- rep(NA, trials)
   trial_no <- rep(NA, trials)
 
   for (i in 1:trials){
   feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
-  #print(feedback[i])
-  #print(self1[i])
   other[i] = self1[i] + feedback_temp
   
+  # make sure other does not go out of bound
   while (other[i]>8 || other[i]<1){
     feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
     other[i] = self1[i] + feedback_temp
   }
+  # save variables
   feedback[i] = feedback_temp
   trial_no[i] = i
   }
-  
+  # save in data frame 
   temp <- tibble(trial_no, self1, other, feedback)
   
   return(temp)
@@ -73,7 +74,6 @@ other_test <- other_f(trials, self1)
 
 ```{r}
 # divide self1 og other by 9
-
 self_prop = other_test$self1/9
 other_prop = other_test$other/9
 
@@ -90,7 +90,22 @@ new_df <- new_df %>% mutate(
 
 
 ```{r}
+# plot
 
+new_df %>% ggplot() + 
+  aes(self_r1) + 
+  geom_histogram() + 
+  xlim(1,8)
+
+new_df %>% ggplot() + 
+  aes(self_r2) + 
+  geom_histogram() + 
+  xlim(1,8)
+
+new_df %>% ggplot() + 
+  aes(other_choice) + 
+  geom_histogram() + 
+  xlim(1,8)
 ```
 
 choose a random feedback between -3, -2, 0, 2, 3
