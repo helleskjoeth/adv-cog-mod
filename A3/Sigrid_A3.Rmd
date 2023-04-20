@@ -1,0 +1,133 @@
+---
+title: "Sigrid's script"
+author: "Astrid Nørgaard Fonager"
+date: "2023-04-20"
+output: word_document
+---
+---
+title: "A3"
+author: "Sigrid Agersnap Bom Nielsen"
+date: "2023-04-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+pacman::p_load(tidyverse,
+        here,
+        posterior,
+        cmdstanr,
+        brms, 
+        tidybayes, 
+        future, 
+        purrr, 
+        furrr,
+        boot,
+        tidyr,
+        patchwork,
+        boot,
+        ggpubr)
+```
+
+
+```{r}
+simpleBayes_f <- function(bias, rating1, other){
+  outcome <- inv_logit_scaled(bias + 0.5*logit_scaled(rating1) +0.5*logit_scaled(other))
+  
+  return(outcome)
+}
+```
+
+
+```{r}
+# values
+bias <- 0
+trials <- 80
+
+# simulate data for simple bayes
+sim_data_SB <- function(trials){
+  
+  # make empty lists
+  trial_no <- rep(NA, trials)
+  feedback <- rep(NA, trials)
+  other <- rep(NA, trials)
+  
+  # initiate first ratings
+  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+
+  # sample feedback
+  for (i in 1:trials){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  
+  
+  # make sure other's rating does not go out of bound [1-8]
+  while (other[i]>8 | other[i]<1){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  }
+  
+  # save variables
+  feedback[i] = feedback_temp
+  trial_no[i] = i
+  }
+
+  # save in data frame 
+  df_round1 <- tibble(trial_no, rating1, other, feedback)
+  
+  # add numbers in probability space
+  df <- df_round1 %>% mutate(
+    rating1_probability = rating1/9,
+    other_probability = other/9
+  )
+  
+  # get ratings for second round
+  df <- df %>% mutate(
+    rating2_probability = simpleBayes_f(bias, rating1_probability, other_probability), 
+    rating2 = round(rating2_probability * 9, 0)
+    ) %>% 
+    select(trial_no,rating1, other, feedback, rating2,everything())
+  
+  return(df)
+}
+
+# test function
+SB_data <- sim_data_SB(trials)
+
+```
+
+
+```{r}
+# plot
+
+SB_data %>% ggplot() + 
+  aes(rating1) + 
+  geom_histogram() + 
+  xlim(1,8)
+
+SB_data %>% ggplot() + 
+  aes(rating2) + 
+  geom_histogram() + 
+  xlim(1,8)
+
+SB_data %>% ggplot() + 
+  aes(other) + 
+  geom_histogram() + 
+  xlim(1,8)
+```
+
+choose a random feedback between -3, -2, 0, 2, 3
+that is the rating of the other agent 
+if not a possible number, do it again
+
+self 2 is to some extent influenced by feedback
+change = the difference between self 1 and self 2
+regression to the mean = the self 1 affects change as well as feedback does 
+
+```{r}
+
+```
+
