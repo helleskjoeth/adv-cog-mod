@@ -404,3 +404,23 @@ ps_recovery_df <- future_pmap_dfr(priors, sim_d_and_fit_prior_sensitivity, .opti
 write_csv(ps_recovery_df, "m1PriorSensitivity.csv")
 ```
 
+
+Model 2 prior sensitivity plot
+
+```{r}
+## prior sensitivity plot
+
+m2_recovery_df <- read.csv("C:/Users/helle/Downloads/recovery_df_sens.csv")
+
+ggplot(m2_recovery_df, aes(prior_sd_RF, rule_followingEst)) +
+  geom_point(alpha = 0.1) +
+  geom_hline(yintercept = 0.8, color = "red") +
+  geom_smooth(method = lm) +
+  theme_classic() +
+  facet_wrap(.~prior_mean_RF) + 
+  labs(title = "Prior sensitivity check")
+```
+
+
+
+
