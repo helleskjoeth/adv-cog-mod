@@ -1,0 +1,98 @@
+---
+title: "Assignment-3"
+author: "Helle"
+date: "2023-04-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Packages: 
+```{r loading packages}
+pacman::p_load(tidyverse, cmdstanr, brms)
+```
+
+
+
+```{r simulation functions}
+#social_conf = a bias for how much agents conform to other's opinions (between XXX)
+#rating1 = how trustworthy agents first deem a face (integer between 1 and 8)
+#feedback = difference between rating 1 and what the group has rated (integer between -3 and 3)
+#rating2 = how agents rate the faces the second time. 
+
+
+sample_rate1 <- round(inv_logit_scaled(rnorm(80, 0.35, .85))*9,0)
+sample_rate1 <- data_frame(sample_rate1)
+
+
+sample_rate1 %>% 
+  ggplot(aes(sample_rate1)) +
+  geom_histogram()
+
+```
+
+
+
+```{r simulation functions}
+#Sampling first rating of trust
+trials <- 80
+self1 <- round(inv_logit_scaled(rnorm(trials, 0.3, 0.5))*9, 0)
+
+#function for sampling feedback and calculating the other's rating
+other_f <- function(trials, self1_var){
+  feedback <- rep(NA, trials)
+  other <- rep(NA, trials)
+  trial_no <- rep(NA, trials)
+
+  for (i in 1:trials){
+  feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+  #print(feedback[i])
+  #print(self1[i])
+  other[i] = self1[i] + feedback_temp
+  
+  while (other[i]>8 || other[i]<1){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = self1[i] + feedback_temp
+  }
+  feedback[i] = feedback_temp
+  trial_no[i] = i
+  }
+
+  temp <- tibble(trial_no, 
+                 self1, 
+                 other, 
+                 feedback,
+                 self_prob = self1/9,
+                 other_prob = other/9)
+  
+  return(temp)
+}
+
+#run function
+df <- other_f(trials, self1)
+
+
+```
+
+
+```{r simple bayes calculating second rating}
+simpleBayes_f <- function(bias, self1, other){
+  outcome <- inv_logit_scaled(bias + 0.5*logit_scaled(self1) +0.5*logit_scaled(other))
+  
+  return(outcome)
+}
+
+
+
+```
+
+```{r calculating second rating}
+#calculate second rating (self2)
+
+df$self2_prob <- simpleBayes_f(0, df$self_prob, df$other_prob)
+df$self2 <- round(df$self2_prob*9,0)
+
+```
+
