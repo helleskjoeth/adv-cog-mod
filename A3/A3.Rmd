@@ -73,13 +73,18 @@ other_test <- other_f(trials, self1)
 
 
 ```{r}
+
 # divide self1 og other by 9
 self_prop = other_test$self1/9
 other_prop = other_test$other/9
 
+# run model 
 self_prop2 <- simpleBayes_f(bias, self_prop, other_prop)
 
+# make new df
 new_df <- tibble(self_prop, other_prop, self_prop2)
+
+# mutate
 new_df <- new_df %>% mutate(
   self_r1 = round(self_prop*9,0),
   other_choice = round(other_prop*9,0),
