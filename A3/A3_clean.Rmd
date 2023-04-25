@@ -1,0 +1,192 @@
+---
+title: "A3_clean"
+author: "Sigrid Agersnap Bom Nielsen"
+date: "2023-04-21"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup, include=FALSE}
+library(pacman)
+pacman::p_load(tidyverse, 
+               brms,
+               cmdstanr,
+               patchwork)
+```
+
+# SIMPLE BAYES
+
+## second try: working
+
+```{r values}
+# values
+bias <- 0
+trials <- 80
+```
+
+
+```{r function: simple bayes}
+SimpleBayes_f <- function(bias, rating1, other){
+  outcome <- inv_logit_scaled(bias + 0.5*logit_scaled(rating1) +0.5*logit_scaled(other))
+  
+  return(outcome)
+}
+```
+
+
+```{r function: simulate data}
+# simulate data for simple bayes
+sim_data_SB <- function(trials, bias){
+  
+  # make empty lists
+  trial_no <- rep(NA, trials)
+  feedback <- rep(NA, trials)
+  other <- rep(NA, trials)
+  bias = rep(bias, trials)
+  
+  # initiate first ratings
+  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+  # sample feedback
+  for (i in 1:trials){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  
+  
+  # make sure other's rating does not go out of bound [1-8]
+  while (other[i]>8 | other[i]<1){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  }
+  
+  # save variables
+  feedback[i] = feedback_temp
+  trial_no[i] = i
+  }
+  # save in data frame 
+  df_round1 <- tibble(trial_no, rating1, other, feedback)
+  
+  # transform choice (1-8) to probability space
+  df <- df_round1 %>% mutate(
+    rating1_probability = rating1/9,
+    other_probability = other/9,
+    bias = bias
+  )
+  
+  # get rating2
+  df <- df %>% mutate(
+    rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+    rating2 = round(rating2_probability * 9, 0)
+    ) %>% 
+    select(trial_no,rating1, other, feedback, rating2, bias, everything()) # change order of columns
+  
+  return(df)
+}
+```
+
+
+```{r function: simulate data}
+# test function
+SB_data <- sim_data_SB(trials, bias)
+```
+
+# running stan
+
+```{r}
+# keep this
+file <- file.path("simple_model.stan")
+mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+
+```{r}
+data_simpleBayes <- list(
+  trials = trials,
+  rating2 = SB_data$rating2_probability, # outcome variable
+  rating1 = SB_data$rating1_probability, # predictor
+  other = SB_data$other_probability, # predictor
+  bias = SB_data$bias
+)
+```
+
+
+```{r}
+samples <- mod_simpleBayes$sample(
+    data = data_simpleBayes,
+    #fixed_param = TRUE,
+    seed = 1985,
+    chains = 2,
+    parallel_chains = 2,
+    threads_per_chain = 2,
+    iter_warmup = 1500,
+    iter_sampling = 3000,
+    refresh = 500
+    )
+
+
+draws_df <- as_draws_df(samples$draws())
+```
+
+
+# when chains work, use the code below
+
+```{r}
+file <- file.path("simple_model.stan")
+mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+# making a sim data and fit data function
+
+```{r}
+sim_d_and_fit <- function(seed, trials, bias){
+  
+  # simulate data
+  SB_data = sim_data_SB(trials, bias)
+  
+  # make data list
+  data_simpleBayes <- list(
+  trials = trials,
+  rating2 = SB_data$rating2_probability, # outcome variable
+  rating1 = SB_data$rating1_probability, # predictor
+  other = SB_data$other_probability, # predictor
+  bias = SB_data$bias
+)
+  # fit model to data
+  samples <- mod_simpleBayes$sample(
+    data = data_simpleBayes,
+   # fixed_param = TRUE,
+    seed = 1985,
+    chains = 2,
+    parallel_chains = 2,
+    threads_per_chain = 2,
+    iter_warmup = 1500,
+    iter_sampling = 3000,
+    refresh = 500
+  )
+
+  # get samples
+  draws_df <- as_draws_df(samples$draws())
+  
+  return(draws_df)
+}
+```
+
+```{r}
+test <- sim_d_and_fit(1000, 70, 0)
+```
+
+```{r}
+0 + 0.5 * qlogis(0.3333333) + 0.5*qlogis(0.6666667)
+```
+```{r}
+pacman::p_load(boot)
+inv.logit(-5.551115e-17)
+```
+
