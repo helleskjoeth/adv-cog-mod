@@ -35,3 +35,18 @@ In the assignment you need to produce a text (+ plots) document (linked to a git
 * showcase a commented version of the stan model (what does each line do?)
 * describe a process of parameter recovery (why are you doing it?, how are you doing it?)
 * discuss the results: how many trials should be used at least to properly recover the parameters? What’s the role of priors? Add relevant plot(s).
+
+
+### ASSIGNMENT 3
+In assignment 3 you have to analyze real world data using Bayesian models of cognition. You can apply the models we discussed during the lectures, but you need to adjust them to reflect the specific setup.
+
+The data comes from the social conformity experiment (https://pubmed.ncbi.nlm.nih.gov/30700729/), where cogsci students (in dataset 1) and schizophrenia patients + controls (dataset 2) combine their own intuition of trustworthiness of given faces to social information.
+
+Your task is to:
+* implement 2 models (at least): simple Bayes vs weighted Bayes. N.B. you'll need to adapt from what we have done in class.
+* simulate data from the model to assess whether the models can be fit. N.B. model and parameter recovery are optional.
+* fit them to one dataset (don't forget to explore the data first!)
+* check model quality
+* do model comparison
+* report (v minimal description of research question, v minimal description of data, description of models, model quality checks, report of results)
+* [optional]: parameter/model recovery
