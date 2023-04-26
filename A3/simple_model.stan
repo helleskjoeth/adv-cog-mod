@@ -15,7 +15,7 @@ transformed data {
   other_logit = logit(other); // log odds
   rating2_logit = logit(rating2); // log odds
 
-}  
+}
 
 parameters {
   real bias;

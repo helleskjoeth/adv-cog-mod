@@ -1,5 +1,5 @@
 
-// simple Bayesian model
+// weighted Bayesian model
 
 data {
   int <lower = 0> trials; // trials = total number of trials 
@@ -35,12 +35,11 @@ transformed parameters {
 model {
   // priors
   target += normal_lpdf(bias | 0, 1);
-  target += normal_lpdf(w_self | 0.75, 0.5);
-  target += normal_lpdf(w_other | 0.75, 0.5);
+  target += normal_lpdf(w_self | 0.75, 0.1);
+  target += normal_lpdf(w_other | 0.75, 0.1);
   
-  // model 
-  target += normal_lpdf(rating2_logit | bias + w_self * to_vector(rating1_logit) + w_other * to_vector(other_logit), 0.2); // outputs log odds 
-  //lpdf = log probability density function - log odds
+  // model - outputs log odds
+  target += inv_logit(normal_lpdf(rating2_logit | bias + w_self * to_vector(rating1_logit) + w_other * to_vector(other_logit), 0.2));
 }
 
 //generated quantities {
