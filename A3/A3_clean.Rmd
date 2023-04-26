@@ -51,7 +51,7 @@ sim_data_SB <- function(trials, bias){
   bias = rep(bias, trials)
   
   # initiate first ratings
-  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+  rating1 <- first_round(trials)
   # sample feedback
   for (i in 1:trials){
     feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
@@ -197,9 +197,14 @@ inv.logit(-5.551115e-17)
 # function to generate data for first round
 first_round <- function(trials){
   rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+  while (max(rating1) > 8){
+    rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+  }
   return(rating1)
 }
 ```
+
+
 
 ```{r function: other's rating}
 # function to generate other's ratings (feedback)
@@ -237,9 +242,16 @@ second_round_SB <- function(df, bias){
   df <- df %>% mutate(
     rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
     rating2 = round(rating2_probability * 9, 0)
-    ) %>% 
-    select(trial_no,rating1, other, feedback, rating2,everything())
+    ) 
   
+  while (max(df$rating2) > 8){
+      df <- df %>% mutate(
+      rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+      rating2 = round(rating2_probability * 9, 0)
+    )
+  }    
+  df %>% select(trial_no,rating1, other, feedback, rating2,everything())   
+    
   return(df)
 }
 ```
@@ -251,12 +263,44 @@ second_round_WB <- function(df, bias, weight_self, weight_other){
   df <- df %>% mutate(
     rating2_probability = WeightedBayes_f(bias, rating1_probability, other_probability, weight_self, weight_other), 
     rating2 = round(rating2_probability * 9, 0)
-    ) %>% 
-    select(trial_no,rating1, other, feedback, rating2,everything())
+    ) 
   
+  while (max(df$rating2) > 8){
+      df <- df %>% mutate(
+      rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+      rating2 = round(rating2_probability * 9, 0)
+    )
+  }    
+  df %>% select(trial_no,rating1, other, feedback, rating2,everything())   
   return(df)
 }
 ```
+
+```{r}
+## TESTING!!!
+  # initiate first ratings
+  rating1 <- first_round(1000)
+  # generate other's rating and feedback
+  df_round1 <- other_rating(1000, rating1)
+  
+  # add numbers in probability space
+ temp <- df_round1 %>% mutate(
+    rating1_probability = rating1/9,
+    other_probability = other/9,
+    weight_other = weight_other,
+    weight_self = weight_self,
+    bias = bias
+  )
+  
+  # get ratings for second round
+  df <- second_round_WB(temp, bias, weight_self, weight_other)
+  
+```
+
+```{r}
+max(df$rating2)
+```
+
 
 # WEIGHTED BAYES
 
@@ -294,7 +338,7 @@ sim_data_WB <- function(trials, weight_self, weight_other, bias){
     other_probability = other/9,
     weight_other = weight_other,
     weight_self = weight_self,
-    bias = bias,
+    bias = bias
   )
   
   # get ratings for second round
@@ -323,10 +367,10 @@ data_weighted_Bayes <- list(
   trials = trials,
   rating2 = WB_data$rating2_probability, # outcome variable
   rating1 = WB_data$rating1_probability, # predictor
-  other = WB_data$other_probability # predictor
- # bias = WB_data$bias,
-#  weight_self = WB_data$weight_self,
-#  weight_other= WB_data$weight_other
+  other = WB_data$other_probability, # predictor
+  bias = WB_data$bias,
+ weight_self = WB_data$weight_self,
+  weight_other= WB_data$weight_other
 )
 ```
 
