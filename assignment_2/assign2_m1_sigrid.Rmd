@@ -1,0 +1,686 @@
+---
+title: "assignment 2"
+author: "Sigrid Agersnap Bom Nielsen"
+date: "2023-03-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r libraries}
+library(pacman)
+
+pacman::p_load(tidyverse,
+        here,
+        posterior,
+        cmdstanr,
+        brms, 
+        tidybayes, 
+        future, 
+        purrr, 
+        furrr,
+        boot,
+        tidyr,
+        patchwork,
+        boot,
+        ggpubr)
+```
+
+# FUNCTIONS
+
+```{r agent functions}
+
+# Random agent
+random_agent <- function(bias = 0.7) {
+  choice <- rbinom(1,1, bias)
+  return(choice)
+}
+
+# Win-shift-lose-stay agent
+win_shift_agent <- function(prev_choice, feedback, bias_lose, bias_win) {
+  if (feedback == 0) { #lose stay
+    if(prev_choice == 0) { 
+      choice = rbinom(1, 1, (1-bias_lose))}
+    if(prev_choice == 1) { 
+      choice = rbinom(1, 1, bias_lose)}
+      }
+  else if (feedback == 1) { #win shift
+    if(prev_choice == 0) { 
+      choice = rbinom(1, 1, bias_win)}
+    if(prev_choice == 1) { 
+      choice = rbinom(1, 1, (1-bias_win))}
+  }
+  return(choice)  
+}
+```
+
+
+```{r simulation function vs random agent}
+
+sim_vs_random <- function(agents, trials, bias_lose, bias_win){
+  
+  feedback <- array(NA, c(agents, trials))
+  performance_df <- tibble()
+  
+  for (agent in 1:agents){
+    self <- rep(NA, trials)
+    bot <- rep(NA, trials)
+  
+    self[1] <- random_agent(0.5)
+    
+    for(trial in seq(trials)) {
+      bot[trial] <- random_agent()
+    }
+    
+    for (trial in 2:trials){
+      if(self[trial-1] == bot[trial-1]) {
+        feedback[agent, trial] = 1
+      } 
+      else {
+        feedback[agent, trial] = 0
+      }
+      self[trial] <- win_shift_agent(prev_choice = self[trial-1], 
+                                      feedback = feedback[agent, trial], 
+                                      bias_lose = bias_lose, 
+                                      bias_win = bias_win)
+    }
+    
+    df_temp <- tibble(agent = agent, self, bot, trial = seq(trials), 
+                      feedback = as.numeric(self==bot)) %>% 
+      mutate(cumulative_self = cumsum(feedback)/seq_along(feedback),
+             cumulative_bot = cumsum(1-feedback)/seq_along(feedback)) 
+    
+    performance_df <- rbind(performance_df, df_temp)
+    
+  }
+  
+  return(performance_df)
+}
+```
+
+# Plotting sim vs random outcome
+Only to check the results of the function. 
+
+```{r simulating}
+temp <-  sim_vs_random(agents = 100,
+                           trials = 150, 
+                           bias_lose = .9,
+                           bias_win = .7)
+```
+
+```{r plotting}
+# choosing only the relevant trials. Here, 3 is just a placeholder to get rid of 
+preds <- temp %>% mutate(
+  LL_next = ifelse(self == 0 & feedback == 0, lead(self), 3),
+  WL_next = ifelse(self == 0 & feedback == 1, lead(self), 3),
+  LR_next = ifelse(self == 1 & feedback == 0, lead(self), 3),
+  WR_next = ifelse(self == 1 & feedback == 1, lead(self), 3) 
+) %>% select("LL_next", "WL_next", "LR_next", "WR_next") 
+
+# LL_next
+p1 <- preds %>% select(LL_next) %>% filter(LL_next == 0 | LL_next == 1) %>% # here, we are losing the 3
+  mutate(
+    LL_next = as.factor(LL_next)
+  ) %>% 
+  ggplot() + 
+  aes(x = LL_next) + 
+  geom_bar(
+    color = 'blue',
+    fill = 'blue',
+    stat = "count", 
+    width = 0.5
+  ) +
+  labs(title = "Losing left - next choice is 0 (left)") +
+  coord_cartesian(ylim = c(0,15000))
+
+# WL_next
+p2 <- preds %>% select(WL_next) %>% filter(WL_next == 0 | WL_next == 1) %>% 
+  mutate(
+    WL_next = as.factor(WL_next)
+  ) %>% 
+  ggplot() + aes(WL_next) + 
+  geom_bar(
+    color = 'blue',
+    fill = 'blue',
+    stat = "count", 
+    width = 0.5
+  ) +
+  labs(title = "Winning left - next choice is 1 (right)") + 
+  coord_cartesian(ylim = c(0,15000))
+
+# LR_next
+#p3 <- 
+p3 <- preds %>% select(LR_next) %>% filter(LR_next == 0 | LR_next == 1) %>% 
+  mutate(
+    LR_next = as.factor(LR_next)
+  ) %>% 
+  ggplot() + aes(LR_next) + 
+  geom_bar(
+    color = 'blue',
+    fill = 'blue',
+    stat = "count", 
+    width = 0.5
+  ) + 
+  labs(title = "Losing right - next choice is 1 (right)") + 
+  coord_cartesian(ylim = c(0,15000))
+
+# WR_next
+p4 <- preds %>% select(WR_next) %>% filter(WR_next == 0 | WR_next == 1) %>% 
+  mutate(
+  WR_next = as.factor(WR_next)
+  ) %>% 
+  ggplot() + 
+  aes(x = WR_next) + 
+  geom_bar(  
+    color = 'blue',
+    fill = 'blue',
+    stat = "count", 
+    width = 0.5) + 
+  labs(title = "Winning right - next choice is 0 (left)") + 
+  coord_cartesian(ylim = c(0,15000))
+
+(p1 | p2) /
+(p3 | p4) + plot_annotation(
+  title = "Checking simulated data",
+  theme = theme(plot.title = element_text(hjust = 0.5)
+                )
+  )
+```
+
+```{r count}
+# count number of 1 and 0 in preds - meget analogt, sorry
+# count how many times that one for example chose left and lost 
+preds %>% count(LL_next == 1 | LL_next == 0) 
+preds %>% count(LR_next == 1 | LR_next == 0) 
+
+preds %>% count(WL_next == 1 | WL_next == 0) 
+preds %>% count(WR_next == 1 | WR_next == 0) 
+
+```
+
+# Fitting the simulated data to the model
+
+```{r simulation and fitting function}
+
+sim_d_and_fit <- function(seed, trials, bias_win, bias_lose, caterpillar = F) {
+  for (t in seq(trials)) {
+    temp <-  sim_vs_random(agents = 1,
+                           trials = trials, 
+                           bias_lose = bias_lose,
+                           bias_win = bias_win)
+  }
+  
+  data <-  list(
+    t = trials,
+    choice = lead(temp$self, 1),
+    self = temp$self,
+    other = temp$bot
+  )
+  
+  data$choice[t] <- 0
+
+  samples <- model$sample(
+    data = data,
+    seed = seed,
+    chains = 1,
+    parallel_chains = 1,
+    threads_per_chain = 1,
+    iter_warmup = 1000,
+    iter_sampling = 2000,
+    refresh = 0,
+    max_treedepth = 20,
+    adapt_delta = 0.99,
+  )
+
+  if(caterpillar == F) {
+  draws_df <- as_draws_df(samples$draws())
+
+  df <- tibble(bias_winEst = draws_df$bias_win_posterior, 
+                 bias_loseEst = draws_df$bias_lose_posterior, 
+                 bias_winTrue = bias_win, 
+                 bias_loseTrue = bias_lose,
+                 bias_win_prior = draws_df$bias_win_prior,
+                 bias_lose_prior = draws_df$bias_win_prior,
+                 prior_preds_LR = draws_df$prior_preds_LR,
+                 prior_preds_LL = draws_df$prior_preds_LL,
+                 prior_preds_WR = draws_df$prior_preds_WR,
+                 prior_preds_WL = draws_df$prior_preds_WL,
+                 post_preds_LR = draws_df$post_preds_LR,
+                 post_preds_LL = draws_df$post_preds_LL,
+                 post_preds_WR = draws_df$post_preds_WR,
+                 post_preds_WL = draws_df$post_preds_WL
+                 )
+  return(df)
+  }
+  else if (caterpillar == T){
+    return(samples)
+  }
+}
+
+```
+
+
+```{r import model}
+## Specify where the model is
+file <- file.path("model1.stan")
+model <- cmdstan_model(file, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+
+
+```
+
+```{r test fitting}
+test <- sim_d_and_fit(seed = 1000, trials = 100, bias_win = 0.7, bias_lose = 0.9)
+```
+
+# plotting time!
+```{r prior and posterior update checks}
+#pacman::p_load(boot, ggpubr)
+
+# bias win
+p1 <- ggplot(test) +
+  geom_density(aes(bias_winEst), fill="blue", alpha=0.3) +
+  geom_density(aes(inv.logit(bias_win_prior)), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Bias win")+
+  coord_cartesian(xlim = c(0,1)) + 
+  geom_point(x = unique(test$bias_winTrue), y = 0, color = "red", shape = 17, size = 5)
+
+
+# bias lose
+p2 <- ggplot(test) +
+  geom_density(aes(bias_loseEst), fill="blue", alpha=0.3) +
+  geom_density(aes(inv.logit(bias_lose_prior)), fill="red", alpha=0.3) + # inv.logit bias_lose_prior
+  xlab("Rate") +
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Bias lose") + 
+  coord_cartesian(xlim = c(0,1)) + 
+  geom_point(x = unique(test$bias_loseTrue), y = 0, color = "red", shape = 17, size = 5)
+
+ggarrange(p1, p2)
+#ggsave("plots/model_pp_update.png", width = 1300, height = 700, units = 'px', dpi = 150)
+# 2000 1150
+```
+So, the posterior learns from the data. Nice. 
+
+```{r prior and posterior predictions}
+# prior and post predictions - when losing and choosing left/0
+
+p1 <- ggplot(test) + 
+  geom_histogram(aes(prior_preds_LL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted right (1) choices out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Choice after agent chose left (0) and lost") + 
+  coord_cartesian(xlim = c(0,100)) + 
+  theme(plot.title = element_text(size=11))
+
+
+p2 <- ggplot(test) + 
+  geom_histogram(aes(prior_preds_LR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.9*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted right (1) choices out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Choice after agent chose right (1) and lost") + 
+  coord_cartesian(xlim = c(0,100)) + 
+  theme(plot.title = element_text(size=11))
+
+# prior and post predictions - when winning
+
+p3 <- ggplot(test) + 
+  geom_histogram(aes(prior_preds_WL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+ # geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted right (1) choices out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Choice after agent chose left (0) and won") + 
+  coord_cartesian(xlim = c(0,100))+ 
+  theme(plot.title = element_text(size=11))
+
+p4 <- ggplot(test) + 
+  geom_histogram(aes(prior_preds_WR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+ # geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted right (1) choices out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Choice after agent chose right (1) and won") + 
+  coord_cartesian(xlim = c(0,100)) + 
+  theme(plot.title = element_text(size=11))
+
+
+ggarrange(p1, p2, p3, p4, common.legend = TRUE)
+
+#ggsave("plots/pp_predict.png", width = 1300, height = 600, units = 'px', dpi = 150)
+# 2000 1150
+```
+So, when the agent loses they have a strong tendency to choose the option which made them lose again. 
+And when the agent wins, they have a tendency to switch to the opposite option of what made them win. It is seen that the tendency to follow the win-switch, lose-stay strategy is the strongest when the agent loses, which. makes sense since bias_lose is 0.9, which is greater than bias_win which is 0.7.
+
+# Parameter recovery
+Please note, parameter recovery was actually one of the first things we did after fitting the simulated data to the model.
+
+```{r}
+#pacman::p_load(tidyr, patchwork)
+plan(multisession, workers = 4)
+
+bias_win = seq(0,1, by = .1)
+bias_lose = seq(0,1,by = .1)
+
+d <- crossing(bias_win, bias_lose)
+
+temp <- tibble(unique(d)) %>% 
+  mutate(seed = 1000, trials = 100) # we ran the parameter recovery with more trials, too
+
+recovery_df <- future_pmap_dfr(temp, sim_d_and_fit, .options = furrr_options(seed = TRUE))
+
+#write.csv(recovery_df, "recovery_df.csv", row.names = FALSE)
+```
+
+
+```{r}
+# parameter recovery plots 
+p1 <- ggplot(recovery_df, aes(bias_winTrue, bias_winEst)) + 
+  geom_point(alpha = 0.1) + 
+  geom_smooth() +
+  theme_classic() + 
+  labs(title = "Bias_win") + 
+  geom_abline(
+    slope = 1, 
+    intercept = 0,
+    color = "red") +
+  coord_cartesian(ylim = c(0,1))
+
+p2 <- ggplot(recovery_df, aes(bias_loseTrue, bias_loseEst)) +
+  geom_point(alpha = 0.1) + 
+  geom_smooth() +
+  theme_classic() + 
+  labs(title = "Bias_lose") +
+  geom_abline(
+    slope = 1, 
+    intercept = 0,
+    color = "red") + 
+  coord_cartesian(ylim = c(0,1))
+
+p1 + p2
+```
+
+Now, I'm plotting the different prior preds and post preds based on different parameter values of bias winTrue and bias_loseTrue, respectively. 
+Extra plotting checks, just for fun. 
+
+## changing bias_winTrue, keeping bias_loseTrue fixed
+```{r changing bias_winTrue, keeping bias_loseTrue fixed}
+# win left
+recovery_df %>% filter(bias_loseTrue == 0.9) %>% ## keeping bias_loseTrue fixed!!
+  ggplot() +
+  geom_histogram(aes(prior_preds_WL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choices when the agent choses 0 and wins", 
+       subtitle = "Bias_loseTrue is fixed at 0.9, bias_winTrue varies") + 
+  coord_cartesian(xlim = c(0,100)) +
+  facet_wrap(~bias_winTrue)
+
+# win right
+recovery_df %>% filter(bias_loseTrue == 0.9) %>% ## keeping bias_loseTrue fixed!!
+  ggplot() +
+  geom_histogram(aes(prior_preds_WR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choices when the agent choses 1 and wins", 
+       subtitle = "Bias_loseTrue is fixed at 0.9, bias_winTrue varies") + 
+  coord_cartesian(xlim = c(0,100)) +
+  facet_wrap(~bias_winTrue)
+
+# lose right 
+recovery_df %>% filter(bias_loseTrue == 0.9) %>% ## keeping bias_loseTrue fixed!!
+  ggplot() +
+  geom_histogram(aes(prior_preds_LR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choices when the agent choses 1 and loses",
+       subtitle = "Bias_loseTrue is fixed at 0.9, bias_winTrue varies") + 
+  coord_cartesian(xlim = c(0,100)) +
+  facet_wrap(~bias_winTrue)
+
+# lose left 
+recovery_df %>% filter(bias_loseTrue == 0.9) %>% ## keeping bias_loseTrue fixed!!
+  ggplot() +
+  geom_histogram(aes(prior_preds_LL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choices when the agent choses 0 and loses", 
+       subtitle = "Bias_loseTrue is fixed at 0.9, bias_winTrue varies") + 
+  coord_cartesian(xlim = c(0,100)) +
+  facet_wrap(~bias_winTrue)
+```
+
+## changing bias_loseTrue, keeping bias_winTrue fixed
+```{r changing bias_loseTrue, keeping bias_winTrue fixed}
+# lose right 
+recovery_df %>% filter(bias_winTrue == 0.8) %>% ## keeping bias_loseTrue fixed!! # for unknown reasons, bias_loseTrue = 0.7 is not in the recovery df 
+  ggplot() +
+  geom_histogram(aes(prior_preds_LR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choices when the agent choses 1 and loses",
+       subtitle = "Bias_winTrue is fixed at 0.8, bias_loseTrue varies") + 
+  coord_cartesian(xlim = c(0,100)) +
+  facet_wrap(~bias_loseTrue)
+
+# lose left  
+recovery_df %>% filter(bias_winTrue == 0.8) %>% ## keeping bias_loseTrue fixed!!
+  ggplot() +
+  geom_histogram(aes(prior_preds_LL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_LL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choices when the agent choses 0 and loses",
+       subtitle = "Bias_winTrue is fixed at 0.8, bias_loseTrue varies") + 
+  coord_cartesian(xlim = c(0,100)) +
+  facet_wrap(~bias_loseTrue)
+
+# win left
+recovery_df %>% filter(bias_winTrue == 0.8) %>% ## keeping bias_loseTrue fixed!!
+  ggplot() +
+  geom_histogram(aes(prior_preds_WL), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WL), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choices when the agent choses 0 and wins",
+       subtitle = "Bias_winTrue is fixed at 0.8, bias_loseTrue varies") + 
+  coord_cartesian(xlim = c(0,100)) +
+  facet_wrap(~bias_loseTrue)
+
+# win right
+recovery_df %>% filter(bias_winTrue == 0.8) %>% ## keeping bias_loseTrue fixed!!
+  ggplot() +
+  geom_histogram(aes(prior_preds_WR), color="lightblue", fill="blue", alpha=0.3, bins=90) +
+  geom_histogram(aes(post_preds_WR), color="darkblue", fill="blue", alpha=0.3, bins=90) +
+  #geom_point(x = 0.7*100, y = 0, color = "red", shape = 17, size = 5) +
+  xlab("Predicted heads out of 100 trials") +
+  ylab("Density") +
+  theme_classic() + 
+  labs(title = "Prior and posterior predicted choices when the agent choses 1 and wins",
+       subtitle = "Bias_winTrue is fixed at 0.8, bias_loseTrue varies") + 
+  coord_cartesian(xlim = c(0,100)) +
+  facet_wrap(~bias_loseTrue)
+
+
+```
+The plots look reasonable in that the distributions behave like we expect them to.
+
+# Checking for sampling issues
+
+```{r caterpillar and correlation plots}
+#Fit 
+samples <- sim_d_and_fit(seed = 1000, trials = 100, bias_win = 0.7, bias_lose = 0.9, caterpillar = T)
+
+# Diagnose
+samples$cmdstan_diagnose()
+
+# Plot hairy caterpillars
+draws_df <- as_draws_df(samples$draws())
+
+# bias win
+ggplot(draws_df, aes(.iteration, bias_win, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Bias win") +
+  theme_classic()
+
+# bias lose
+ggplot(draws_df, aes(.iteration, bias_lose, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Bias lose") +
+  theme_classic()
+
+# correlation plot
+ggplot(draws_df, aes(bias_lose, bias_win, group = .chain, color=.chain)) + 
+  geom_point() +
+  labs(title = "Correlation") +
+  theme_classic()
+```
+Looks good.
+
+# Prior sensitivity checks
+Please note, that the following code was run in uCloud with 100 trials and only 1000 sampling iterations. This was done because it was too computationally heavy for my local computer. Also, increasing the number of trials to more than 100 and the number of sampling iteration (after warm-up) to more than 1000 was too computationally costly considering that the 'priors' df already had 10,000 observations.
+
+```{r import model}
+## Specify where the model is
+file2 <- file.path("model1_prior_sensitivity.stan")
+model <- cmdstan_model(file2, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+
+```
+
+```{r}
+prior_mean_bias_win <- 0
+prior_sd_bias_win <- seq(0.1, 1, 0.1)
+prior_mean_bias_lose <- 0
+prior_sd_bias_lose <- seq(0.1, 1, 0.1)
+priors <-  tibble(
+  expand.grid(
+    tibble(
+      prior_mean_bias_win, prior_sd_bias_win, prior_mean_bias_lose, prior_sd_bias_lose)))
+
+```
+
+
+```{r}
+#pacman::p_load(future, purrr, furrr)
+plan(multisession, workers = 4)
+
+sim_d_and_fit_prior_sensitivity <- function(
+    prior_mean_bias_win, prior_sd_bias_win, prior_mean_bias_lose, prior_sd_bias_lose, trials = 100) {
+    for (t in seq(trials)) {
+    temp <-  sim_vs_random(agents = 1,
+                           trials = trials, 
+                           bias_lose = 0.9,
+                           bias_win = 0.7)
+    }
+  
+    data <-  list(
+    t = trials,
+    choice = lead(temp$self, 1),
+    self = temp$self,
+    other = temp$bot,
+    prior_mean_bias_win = prior_mean_bias_win,
+    prior_sd_bias_win = prior_sd_bias_win,
+    prior_mean_bias_lose = prior_mean_bias_lose,
+    prior_sd_bias_lose = prior_sd_bias_lose
+  )
+  
+  data$choice[trials] <- 0 # change this!
+    
+    samples <- model$sample(
+      data = data,
+      seed = 1000,
+      chains = 1,
+      parallel_chains = 1,
+      threads_per_chain = 1,
+      iter_warmup = 1000,
+      iter_sampling = 1000,
+      refresh = 0,
+      max_treedepth = 20,
+      adapt_delta = 0.99
+    )
+    
+    draws_df <- as_draws_df(samples$draws())
+      temp <- tibble(
+                    bias_winEst = draws_df$bias_win_posterior,
+                    bias_loseEst = draws_df$bias_lose_posterior,
+                   # bias_winTrue = bias_win,
+                    #bias_loseTrue = bias_lose,
+                    bias_win_prior = draws_df$bias_win_prior,
+                    bias_lose_prior = draws_df$bias_lose_prior,
+                    prior_mean_bias_win = prior_mean_bias_win,
+                    prior_sd_bias_win = prior_sd_bias_win,
+                    prior_mean_bias_lose = prior_mean_bias_lose,
+                    prior_sd_bias_lose = prior_sd_bias_lose)
+
+  return(temp)
+
+}
+```
+
+
+```{r}
+sensitivity_check <- future_pmap_dfr(priors, sim_d_and_fit_prior_sensitivity, .options = furrr_options(seed = TRUE))
+
+#write_csv(sensitivity_check, "prior_sensitivity_check/m1_prior_sensitivity_100_trials_0.2-1.csv")
+```
+
+```{r prior sensitivity plot}
+# bias win 
+sensitivity_check %>% 
+  ggplot() +
+  aes(prior_sd_bias_win, bias_winEst) +
+  geom_point(alpha = 0.1) + 
+  geom_hline(yintercept = 0.7, color = "red") + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(.~prior_sd_bias_lose) + 
+  theme_classic()
+
+# bias lose 
+sensitivity_check %>% 
+  ggplot() +
+  aes(prior_sd_bias_lose, bias_loseEst) +
+  geom_point(alpha = 0.1) + 
+  geom_hline(yintercept = 0.7, color = "red") + 
+  geom_smooth(method = "lm") + 
+  facet_wrap(.~prior_sd_bias_win) + 
+  theme_classic()
+
+```
+
