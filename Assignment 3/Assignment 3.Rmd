@@ -76,7 +76,7 @@ sim_data_SB <- function(trials){
     rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
     rating2 = round(rating2_probability * 9, 0)
     ) %>% 
-    select(trial_no,rating1, other, feedback, rating2,everything())
+    select(trial_no,rating1, other, feedback, rating2, everything())
   
   return(df)
 }
