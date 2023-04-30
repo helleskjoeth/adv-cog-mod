@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+#knitr::opts_chunk$set(echo = TRUE)
 ```
 
 ```{r packages, include=FALSE}
@@ -21,14 +21,15 @@ pacman::p_load(tidyverse,
 
 ```{r function: first round (rating1)}
 # function to generate data for first round
-first_round <- function(trials){
-  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
-  while (max(rating1) > 8){
-    rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+first_round <- function(trials, sd){
+  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, sd))*9, 0)
+  while (max(rating1) > 8 | min(rating1) < 1){
+    rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, sd))*9, 0)
   }
   return(rating1)
 }
 ```
+
 
 ```{r function: other's rating}
 # function to generate other's ratings (feedback)
@@ -94,10 +95,10 @@ SimpleBayes_f <- function(bias, rating1, other){
 
 ```{r function: simulate SB data}
 # simulate data for simple bayes
-sim_data_SB <- function(trials, bias){
+sim_data_SB <- function(trials, bias, sd){
 
   # simulate first ratings
-  rating1 <- first_round(trials)
+  rating1 <- first_round(trials, sd)
   
   # simulate other ratings
   temp <- other_rating(trials, rating1)
@@ -106,7 +107,8 @@ sim_data_SB <- function(trials, bias){
   df <- temp %>% mutate(
     rating1_probability = rating1/9,
     other_probability = other/9,
-    bias = bias
+    bias = bias, 
+    sd = sd
   )
   
   # simulate rating2
@@ -117,18 +119,18 @@ sim_data_SB <- function(trials, bias){
 ```
 
 ```{r sim_d_and_fit_SB data function}
-sim_d_and_fit_SB <- function(seed, trials, bias){
+sim_d_and_fit_SB <- function(seed, trials, bias, sd){
   
   # simulate data
-  SB_data = sim_data_SB(trials, bias)
+  SB_data = sim_data_SB(trials, bias, sd)
   
   # make data list
   data_simpleBayes <- list(
   trials = trials,
   rating2 = SB_data$rating2_probability, # outcome variable
   rating1 = SB_data$rating1_probability, # predictor
-  other = SB_data$other_probability, # predictor
-  bias = SB_data$bias
+  other = SB_data$other_probability # predictor
+  #bias = SB_data$bias
 )
   # fit model to data
   samples <- mod_simpleBayes$sample(
@@ -156,12 +158,13 @@ sim_d_and_fit_SB <- function(seed, trials, bias){
 seed <- 1985
 bias <- 0
 trials <- 80
+sd <- 0.85
 ```
 
 # checking simulated data
 ```{r function: simulate SB data}
 # test function
-SB_data <- sim_data_SB(trials, bias)
+SB_data <- sim_data_SB(trials, bias, sd)
 ```
 
 
@@ -172,7 +175,7 @@ mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
 ```
 # simulate and fit SB data
 ```{r simulate and fit SB data}
-test_SB <- sim_d_and_fit_SB(seed, trials, bias)
+test_SB <- sim_d_and_fit_SB(seed, trials, bias, sd)
 ```
 
 # checking the data outcome  SB
@@ -253,10 +256,10 @@ WeightedBayes_f <-  function(bias, rating1, other, weight_self, weight_other){
 ```
 
 ```{r function: simulate data}
-sim_data_WB <- function(trials, weight_self, weight_other, bias){
+sim_data_WB <- function(trials, weight_self, weight_other, bias, sd){
   
   # initiate first ratings
-  rating1 <- first_round(trials)
+  rating1 <- first_round(trials, sd)
   # generate other's rating and feedback
   df_round1 <- other_rating(trials, rating1)
   
@@ -266,7 +269,8 @@ sim_data_WB <- function(trials, weight_self, weight_other, bias){
     other_probability = other/9,
     weight_other = weight_other,
     weight_self = weight_self,
-    bias = bias
+    bias = bias, 
+    sd = sd
   )
   
   # get ratings for second round
@@ -278,18 +282,18 @@ sim_data_WB <- function(trials, weight_self, weight_other, bias){
 
 
 ```{r function: sim d and fit WB}
-sim_d_and_fit_WB <- function(trials, weight_self, weight_other, bias){
+sim_d_and_fit_WB <- function(trials, weight_self, weight_other, bias, sd){
   
-  sim_data <- sim_data_WB(trials, weight_self, weight_other, bias)
+  sim_data <- sim_data_WB(trials, weight_self, weight_other, bias, sd)
 
   data_weighted_Bayes <- list(
   trials = trials,
   rating2 = sim_data$rating2_probability, # outcome variable
   rating1 = sim_data$rating1_probability, # predictor
-  other = sim_data$other_probability, # predictor
-  bias = sim_data$bias,
- weight_self = sim_data$weight_self,
-  weight_other= sim_data$weight_other
+  other = sim_data$other_probability # predictor
+  #bias = sim_data$bias,
+ #weight_self = sim_data$weight_self,
+  #weight_other= sim_data$weight_other
 )
   
   samples <- model_WB$sample(
@@ -312,15 +316,16 @@ sim_d_and_fit_WB <- function(trials, weight_self, weight_other, bias){
 
 ```{r values}
 # values
-bias <- 0
+bias <- 0.3
 trials <- 80
 weight_self <- 0.3
 weight_other <- 0.4
+sd <- 0.85
 ```
 
 # checking simulated data
 ```{r generate data}
-WB_data <- sim_data_WB(trials, weight_self, weight_other, bias)
+WB_data <- sim_data_WB(trials, weight_self, weight_other, bias, sd)
 ```
 
 ## Fitting the WB model
@@ -333,7 +338,7 @@ model_WB <- cmdstan_model(file,
 ```
 
 ```{r}
-test_WB <- sim_d_and_fit_WB(trials, weight_self, weight_other, bias)
+test_WB <- sim_d_and_fit_WB(trials, weight_self, weight_other, bias, sd)
 ```
 
 # checking the data outcome  WB
@@ -353,12 +358,20 @@ test_WB %>% ggplot() +
 ```{r}
 pacman::p_load(scales)
 
+# if the post preds are the same in the column 
+test_WB %>% 
+  mutate(
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
+  select(predictions) %>% 
+  slice(1)
+
+
+# if not, plot it
 test_WB %>% mutate(
   predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
   ggplot() + 
   aes(predictions) + geom_histogram() + 
   scale_x_continuous(breaks = pretty_breaks(n = 9)) # might need to change this given the estimated data
-
 ```
 
 # prior and posterior update checks WB
