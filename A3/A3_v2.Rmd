@@ -1,0 +1,417 @@
+---
+title: "A3"
+author: "Sigrid Agersnap Bom Nielsen"
+date: "2023-04-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, include=FALSE}
+library(pacman)
+pacman::p_load(tidyverse, 
+               brms,
+               cmdstanr,
+               patchwork)
+```
+
+# General functions - to be used in both SB and WB
+
+```{r function: first round (rating1)}
+# function to generate data for first round
+first_round <- function(trials, sd){
+  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, sd))*9, 0)
+  while (max(rating1) > 8 | min(rating1) < 1){
+    rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, sd))*9, 0)
+  }
+  return(rating1)
+}
+```
+
+
+```{r function: other's rating}
+# function to generate other's ratings (feedback)
+other_rating <- function(trials, rating1){
+  # make empty lists
+  trial_no <- rep(NA, trials)
+  feedback <- rep(NA, trials)
+  other <- rep(NA, trials)
+  # sample feedback
+  for (i in 1:trials){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  
+  
+  # make sure other's rating does not go out of bound [1-8]
+  while (other[i]>8 | other[i]<1){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  }
+  
+  # save variables
+  feedback[i] = feedback_temp
+  trial_no[i] = i
+  }
+  # save in data frame 
+  df_round1 <- tibble(trial_no, rating1, other, feedback)
+  
+  return(df_round1)
+}
+```
+
+# Simple Bayes functions
+
+```{r functions: second round (rating2)}
+# SIMPLE BAYES: function to generate data for second round
+second_round_SB <- function(df, bias){
+  df <- df %>% mutate(
+    rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+    rating2 = round(rating2_probability * 9, 0)
+    ) 
+  
+  while (max(df$rating2) > 8){
+      df <- df %>% mutate(
+      rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+      rating2 = round(rating2_probability * 9, 0)
+    )
+  }    
+  df %>% select(trial_no,rating1, other, feedback, rating2,everything())   
+    
+  return(df)
+}
+```
+
+
+```{r function: simple bayes}
+SimpleBayes_f <- function(bias, rating1, other){
+  outcome <- inv_logit_scaled(bias + 0.5*logit_scaled(rating1) +0.5*logit_scaled(other))
+  
+  return(outcome)
+}
+```
+
+
+```{r function: simulate SB data}
+# simulate data for simple bayes
+sim_data_SB <- function(trials, bias, sd){
+
+  # simulate first ratings
+  rating1 <- first_round(trials, sd)
+  
+  # simulate other ratings
+  temp <- other_rating(trials, rating1)
+
+  # transform choice (1-8) to probability space
+  df <- temp %>% mutate(
+    rating1_probability = rating1/9,
+    other_probability = other/9,
+    bias = bias, 
+    sd = sd
+  )
+  
+  # simulate rating2
+  df2 <- second_round_SB(df, bias)
+
+  return(df2)
+}
+```
+
+```{r sim_d_and_fit_SB data function}
+sim_d_and_fit_SB <- function(seed, trials, bias, sd){
+  
+  # simulate data
+  SB_data = sim_data_SB(trials, bias, sd)
+  
+  # make data list
+  data_simpleBayes <- list(
+  trials = trials,
+  rating2 = SB_data$rating2_probability, # outcome variable
+  rating1 = SB_data$rating1_probability, # predictor
+  other = SB_data$other_probability # predictor
+  #bias = SB_data$bias
+)
+  # fit model to data
+  samples <- mod_simpleBayes$sample(
+    data = data_simpleBayes,
+   # fixed_param = TRUE,
+    seed = 1985,
+    chains = 2,
+    parallel_chains = 2,
+    threads_per_chain = 2,
+    iter_warmup = 1500,
+    iter_sampling = 3000,
+    refresh = 500
+  )
+
+  # get samples
+  draws_df <- as_draws_df(samples$draws())
+  
+  return(draws_df)
+}
+```
+
+# input values SB
+```{r SB values}
+# values
+seed <- 1985
+bias <- 0
+trials <- 80
+sd <- 0.85
+```
+
+# checking simulated data
+```{r function: simulate SB data}
+# test function
+SB_data <- sim_data_SB(trials, bias, sd)
+```
+
+
+```{r read SB stan file}
+file <- file.path("SB_model.stan")
+mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+# simulate and fit SB data
+```{r simulate and fit SB data}
+test_SB <- sim_d_and_fit_SB(seed, trials, bias, sd)
+```
+
+# checking the data outcome  SB
+
+```{r}
+#round(test_SB$lok_lik*9,0)
+min(test_SB$log_lik)
+max(test_SB$log_lik)
+
+```
+
+
+```{r}
+test_SB %>% ggplot() + 
+  aes(`post_preds[1]`) + geom_histogram()
+```
+
+```{r}
+pacman::p_load(scales)
+
+test_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
+  ggplot() + 
+  aes(predictions) + geom_histogram() + 
+  scale_x_continuous(breaks = pretty_breaks(n = 9)) # might need to change this given the estimated data
+
+```
+# prior and posterior update checks
+
+```{r}
+pacman::p_load(boot, ggpubr)
+
+# bias 
+ggplot(test_SB) +
+  geom_density(aes(inv.logit(bias_posterior)), fill="blue", alpha=0.3) +
+  geom_density(aes(inv.logit(bias_prior)), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Bias")#+
+  #coord_cartesian(xlim = c(0,1))
+
+#ggsave("plots/model_pp_update.png", width = 1300, height = 700, units = 'px', dpi = 150)
+# 2000 1150
+```
+
+
+# Weighted Bayes functions
+
+```{r functions: second round}
+# WEIGHTED BAYES: function to generate data for second round
+second_round_WB <- function(df, bias, weight_self, weight_other){
+  df <- df %>% mutate(
+    rating2_probability = WeightedBayes_f(bias, rating1_probability, other_probability, weight_self, weight_other), 
+    rating2 = round(rating2_probability * 9, 0)
+    ) 
+  
+  while (max(df$rating2) > 8){
+      df <- df %>% mutate(
+      rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+      rating2 = round(rating2_probability * 9, 0)
+    )
+  }    
+  df %>% select(trial_no,rating1, other, feedback, rating2,everything())   
+  return(df)
+}
+```
+
+```{r function: weighted bayes}
+WeightedBayes_f <-  function(bias, rating1, other, weight_self, weight_other){
+  w1 <- 0.5 * weight_self + 0.5 # transform from a [0;1] space to a [0.5;1] space
+  w2 <- 0.5 * weight_other + 0.5
+  outcome <- inv_logit_scaled(bias + w1 * logit_scaled(rating1) + w2 * logit_scaled(other))
+  return(outcome)
+}
+# WeightedBayes_f(bias = 0, rating1 = 5/9, other = 6/9, weight_self = 0.3, weight_other = 0.4) * 9
+# Jesper says plot all combinations of ratings and weights to check if it does what it should
+```
+
+```{r function: simulate data}
+sim_data_WB <- function(trials, weight_self, weight_other, bias, sd){
+  
+  # initiate first ratings
+  rating1 <- first_round(trials, sd)
+  # generate other's rating and feedback
+  df_round1 <- other_rating(trials, rating1)
+  
+  # add numbers in probability space
+ temp <- df_round1 %>% mutate(
+    rating1_probability = rating1/9,
+    other_probability = other/9,
+    weight_other = weight_other,
+    weight_self = weight_self,
+    bias = bias, 
+    sd = sd
+  )
+  
+  # get ratings for second round
+  df <- second_round_WB(temp, bias, weight_self, weight_other)
+  
+  return(df)
+}
+```
+
+
+```{r function: sim d and fit WB}
+sim_d_and_fit_WB <- function(trials, weight_self, weight_other, bias, sd){
+  
+  sim_data <- sim_data_WB(trials, weight_self, weight_other, bias, sd)
+
+  data_weighted_Bayes <- list(
+  trials = trials,
+  rating2 = sim_data$rating2_probability, # outcome variable
+  rating1 = sim_data$rating1_probability, # predictor
+  other = sim_data$other_probability # predictor
+  #bias = sim_data$bias,
+ #weight_self = sim_data$weight_self,
+  #weight_other= sim_data$weight_other
+)
+  
+  samples <- model_WB$sample(
+    data = data_weighted_Bayes,
+    #fixed_param = TRUE,
+    seed = 1985,
+    chains = 2,
+    parallel_chains = 2,
+    threads_per_chain = 2,
+    iter_warmup = 1500,
+    iter_sampling = 3000,
+    refresh = 500
+    )
+  
+  draws_df <- as_draws_df(samples$draws())
+  
+  return(draws_df)
+}
+```
+
+```{r values}
+# values
+bias <- 0.3
+trials <- 80
+weight_self <- 0.3
+weight_other <- 0.4
+sd <- 0.85
+```
+
+# checking simulated data
+```{r generate data}
+WB_data <- sim_data_WB(trials, weight_self, weight_other, bias, sd)
+```
+
+## Fitting the WB model
+```{r import stan WB model}
+## Specify where the model is
+file <- file.path("WB_model.stan")
+model_WB <- cmdstan_model(file, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+```{r}
+test_WB <- sim_d_and_fit_WB(trials, weight_self, weight_other, bias, sd)
+```
+
+# checking the data outcome  WB
+
+```{r}
+min(test_WB$log_lik)
+max(test_WB$log_lik)
+
+```
+
+
+```{r}
+test_WB %>% ggplot() + 
+  aes(`post_preds[1]`) + geom_histogram()
+```
+
+```{r}
+pacman::p_load(scales)
+
+# if the post preds are the same in the column 
+test_WB %>% 
+  mutate(
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
+  select(predictions) %>% 
+  slice(1)
+
+
+# if not, plot it
+test_WB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
+  ggplot() + 
+  aes(predictions) + geom_histogram() + 
+  scale_x_continuous(breaks = pretty_breaks(n = 9)) # might need to change this given the estimated data
+```
+
+# prior and posterior update checks WB
+
+```{r}
+pacman::p_load(boot, ggpubr)
+
+# bias 
+ggplot(test_WB) +
+  geom_density(aes(inv.logit(bias_posterior)), fill="blue", alpha=0.3) +
+  geom_density(aes(inv.logit(bias_prior)), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Bias")#+
+  #coord_cartesian(xlim = c(0,1))
+
+# w1 - not sure about the scale
+ggplot(test_WB) +
+  geom_density(aes(w_self_posterior), fill="blue", alpha=0.3) +
+  geom_density(aes(w_self_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "W_self")#+
+  #coord_cartesian(xlim = c(0,1))
+
+# w2 - not sure about the scale
+ggplot(test_WB) +
+  geom_density(aes(w_other_posterior), fill="blue", alpha=0.3) +
+  geom_density(aes(w_other_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "W_other")#+
+  #coord_cartesian(xlim = c(0,1))
+
+#ggsave("plots/model_pp_update.png", width = 1300, height = 700, units = 'px', dpi = 150)
+# 2000 1150
+
+```
+
+

@@ -1,0 +1,395 @@
+---
+title: "A3_clean"
+author: "Sigrid Agersnap Bom Nielsen"
+date: "2023-04-21"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup, include=FALSE}
+library(pacman)
+pacman::p_load(tidyverse, 
+               brms,
+               cmdstanr,
+               patchwork)
+```
+
+# SIMPLE BAYES
+
+## second try: working
+
+```{r values}
+# values
+bias <- 0
+trials <- 80
+```
+
+
+```{r function: simple bayes}
+SimpleBayes_f <- function(bias, rating1, other){
+  outcome <- inv_logit_scaled(bias + 0.5*logit_scaled(rating1) +0.5*logit_scaled(other))
+  
+  return(outcome)
+}
+```
+
+
+```{r function: simulate data}
+# simulate data for simple bayes
+sim_data_SB <- function(trials, bias){
+  
+  # make empty lists
+  trial_no <- rep(NA, trials)
+  feedback <- rep(NA, trials)
+  other <- rep(NA, trials)
+  bias = rep(bias, trials)
+  
+  # initiate first ratings
+  rating1 <- first_round(trials)
+  # sample feedback
+  for (i in 1:trials){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  
+  
+  # make sure other's rating does not go out of bound [1-8]
+  while (other[i]>8 | other[i]<1){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  }
+  
+  # save variables
+  feedback[i] = feedback_temp
+  trial_no[i] = i
+  }
+  # save in data frame 
+  df_round1 <- tibble(trial_no, rating1, other, feedback)
+  
+  # transform choice (1-8) to probability space
+  df <- df_round1 %>% mutate(
+    rating1_probability = rating1/9,
+    other_probability = other/9,
+    bias = bias
+  )
+  
+  # get rating2
+  df <- df %>% mutate(
+    rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+    rating2 = round(rating2_probability * 9, 0)
+    ) %>% 
+    select(trial_no,rating1, other, feedback, rating2, bias, everything()) # change order of columns
+  
+  return(df)
+}
+```
+
+
+```{r function: simulate data}
+# test function
+SB_data <- sim_data_SB(trials, bias)
+```
+
+# running stan
+
+```{r}
+# keep this
+file <- file.path("simple_model.stan")
+mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+
+```{r}
+data_simpleBayes <- list(
+  trials = trials,
+  rating2 = SB_data$rating2_probability, # outcome variable
+  rating1 = SB_data$rating1_probability, # predictor
+  other = SB_data$other_probability, # predictor
+  bias = SB_data$bias
+)
+```
+
+
+```{r}
+samples <- mod_simpleBayes$sample(
+    data = data_simpleBayes,
+    #fixed_param = TRUE,
+    seed = 1985,
+    chains = 2,
+    parallel_chains = 2,
+    threads_per_chain = 2,
+    iter_warmup = 1500,
+    iter_sampling = 3000,
+    refresh = 500
+    )
+
+
+draws_df <- as_draws_df(samples$draws())
+```
+
+
+# when chains work, use the code below
+
+```{r}
+file <- file.path("simple_model.stan")
+mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+# making a sim data and fit data function
+
+```{r}
+sim_d_and_fit <- function(seed, trials, bias){
+  
+  # simulate data
+  SB_data = sim_data_SB(trials, bias)
+  
+  # make data list
+  data_simpleBayes <- list(
+  trials = trials,
+  rating2 = SB_data$rating2_probability, # outcome variable
+  rating1 = SB_data$rating1_probability, # predictor
+  other = SB_data$other_probability, # predictor
+  bias = SB_data$bias
+)
+  # fit model to data
+  samples <- mod_simpleBayes$sample(
+    data = data_simpleBayes,
+   # fixed_param = TRUE,
+    seed = 1985,
+    chains = 2,
+    parallel_chains = 2,
+    threads_per_chain = 2,
+    iter_warmup = 1500,
+    iter_sampling = 3000,
+    refresh = 500
+  )
+
+  # get samples
+  draws_df <- as_draws_df(samples$draws())
+  
+  return(draws_df)
+}
+```
+
+```{r}
+test <- sim_d_and_fit(1000, 70, 0)
+```
+
+```{r}
+0 + 0.5 * qlogis(0.3333333) + 0.5*qlogis(0.6666667)
+```
+```{r}
+pacman::p_load(boot)
+inv.logit(-5.551115e-17)
+```
+
+## weighted bayes 
+
+# General functions
+```{r function: first round}
+# function to generate data for first round
+first_round <- function(trials){
+  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+  while (max(rating1) > 8){
+    rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+  }
+  return(rating1)
+}
+```
+
+
+
+```{r function: other's rating}
+# function to generate other's ratings (feedback)
+other_rating <- function(trials, rating1){
+  # make empty lists
+  trial_no <- rep(NA, trials)
+  feedback <- rep(NA, trials)
+  other <- rep(NA, trials)
+  # sample feedback
+  for (i in 1:trials){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  
+  
+  # make sure other's rating does not go out of bound [1-8]
+  while (other[i]>8 | other[i]<1){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  }
+  
+  # save variables
+  feedback[i] = feedback_temp
+  trial_no[i] = i
+  }
+  # save in data frame 
+  df_round1 <- tibble(trial_no, rating1, other, feedback)
+  
+  return(df_round1)
+}
+```
+
+```{r functions: second round}
+# SIMPLE BAYES: function to generate data for second round
+second_round_SB <- function(df, bias){
+  df <- df %>% mutate(
+    rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+    rating2 = round(rating2_probability * 9, 0)
+    ) 
+  
+  while (max(df$rating2) > 8){
+      df <- df %>% mutate(
+      rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+      rating2 = round(rating2_probability * 9, 0)
+    )
+  }    
+  df %>% select(trial_no,rating1, other, feedback, rating2,everything())   
+    
+  return(df)
+}
+```
+
+
+```{r functions: second round}
+# WEIGHTED BAYES: function to generate data for second round
+second_round_WB <- function(df, bias, weight_self, weight_other){
+  df <- df %>% mutate(
+    rating2_probability = WeightedBayes_f(bias, rating1_probability, other_probability, weight_self, weight_other), 
+    rating2 = round(rating2_probability * 9, 0)
+    ) 
+  
+  while (max(df$rating2) > 8){
+      df <- df %>% mutate(
+      rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
+      rating2 = round(rating2_probability * 9, 0)
+    )
+  }    
+  df %>% select(trial_no,rating1, other, feedback, rating2,everything())   
+  return(df)
+}
+```
+
+```{r}
+## TESTING!!!
+  # initiate first ratings
+  rating1 <- first_round(1000)
+  # generate other's rating and feedback
+  df_round1 <- other_rating(1000, rating1)
+  
+  # add numbers in probability space
+ temp <- df_round1 %>% mutate(
+    rating1_probability = rating1/9,
+    other_probability = other/9,
+    weight_other = weight_other,
+    weight_self = weight_self,
+    bias = bias
+  )
+  
+  # get ratings for second round
+  df <- second_round_WB(temp, bias, weight_self, weight_other)
+  
+```
+
+```{r}
+max(df$rating2)
+```
+
+
+# WEIGHTED BAYES
+
+```{r values}
+# values
+bias <- 0
+trials <- 80
+weight_self <- 0.3
+weight_other <- 0.4
+```
+
+
+```{r function: weighted bayes}
+WeightedBayes_f <-  function(bias, rating1, other, weight_self, weight_other){
+  w1 <- 0.5 * weight_self + 0.5 # transform from a [0;1] space to a [0.5;1] space
+  w2 <- 0.5 * weight_other + 0.5
+  outcome <- inv_logit_scaled(bias + w1 * logit_scaled(rating1) + w2 * logit_scaled(other))
+  return(outcome)
+}
+# WeightedBayes_f(bias = 0, rating1 = 5/9, other = 6/9, weight_self = 0.3, weight_other = 0.4) * 9
+# Jesper says plot all combinations of ratings and weights to check if it does what it should
+```
+
+```{r function: simulate data}
+sim_data_WB <- function(trials, weight_self, weight_other, bias){
+  
+  # initiate first ratings
+  rating1 <- first_round(trials)
+  # generate other's rating and feedback
+  df_round1 <- other_rating(trials, rating1)
+  
+  # add numbers in probability space
+ temp <- df_round1 %>% mutate(
+    rating1_probability = rating1/9,
+    other_probability = other/9,
+    weight_other = weight_other,
+    weight_self = weight_self,
+    bias = bias
+  )
+  
+  # get ratings for second round
+  df <- second_round_WB(temp, bias, weight_self, weight_other)
+  
+  return(df)
+}
+```
+
+```{r generate data}
+WB_data <- sim_data_WB(trials, weight_self, weight_other, bias)
+```
+
+## Fitting the model
+
+```{r import model}
+## Specify where the model is
+file <- file.path("WB_model.stan")
+model_WB <- cmdstan_model(file, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+```{r}
+data_weighted_Bayes <- list(
+  trials = trials,
+  rating2 = WB_data$rating2_probability, # outcome variable
+  rating1 = WB_data$rating1_probability, # predictor
+  other = WB_data$other_probability, # predictor
+  bias = WB_data$bias,
+ weight_self = WB_data$weight_self,
+  weight_other= WB_data$weight_other
+)
+```
+
+```{r}
+samples <- model_WB$sample(
+    data = data_weighted_Bayes,
+    #fixed_param = TRUE,
+    seed = 1985,
+    chains = 2,
+    parallel_chains = 2,
+    threads_per_chain = 2,
+    iter_warmup = 1500,
+    iter_sampling = 3000,
+    refresh = 500
+    )
+```
+
+
+```{r}
+draws_df <- as_draws_df(samples$draws())
+```
+
