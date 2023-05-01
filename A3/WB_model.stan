@@ -35,11 +35,10 @@ transformed parameters {
 
 model {
   // priors
-  target += normal_lpdf(SD | 0, 0.1) - normal_lccdf(0 | 0, 0.1);
+  target += exponential_lpdf(SD | 10);
   target += normal_lpdf(bias | 0, 1);
   target += normal_lpdf(w_self | 0.75, 0.1);
   target += normal_lpdf(w_other | 0.75, 0.1);
- // target += normal_lpdf(SD | 0.3, 0.1)-normal_lccdf(0|0.3,0.1);
 
   // model - outputs log odds
   target += normal_lpdf(rating2_logit | bias + w_self * to_vector(rating1_logit) + w_other * to_vector(other_logit), SD);
@@ -52,19 +51,25 @@ generated quantities {
   real w_self_posterior;
   real w_other_prior;
   real w_other_posterior;
-  real log_lik; // to be used for model comparison
+  array[trials] real log_lik; // to be used for model comparison
   array[trials] real post_preds;
-  //real SD_prior;
+  real SD_prior;
+  real SD_post;
   
   bias_prior = normal_rng(0,1);
   w_self_prior = normal_rng(0.75, 0.1);
   w_other_prior = normal_rng(0.75, 0.1);
- // SD_prior = normal_rng(0.3, 0.1);
+  SD_prior = exponential_rng(10);
+  SD_post = SD;
+
   
   bias_posterior = bias;
   w_self_posterior = w_self;
   w_other_posterior = w_other;
   
-  log_lik =  normal_lpdf(rating2_logit | bias + w_self * to_vector(rating1_logit) + w_other * to_vector(other_logit), SD);
+  for (t in 1:trials){
+    log_lik[t] = normal_lpdf(rating2_logit | bias + 0.5 * to_vector(rating1_logit) + 0.5 * to_vector(other_logit), SD);
+    }  
   post_preds = normal_rng(bias + w_self * to_vector(rating1_logit) + w_other * to_vector(other_logit), SD);
 } 
+

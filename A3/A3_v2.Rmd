@@ -22,12 +22,20 @@ pacman::p_load(tidyverse,
 ```{r function: first round (rating1)}
 # function to generate data for first round
 first_round <- function(trials, sd){
-  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, sd))*9, 0)
+  rating1 <- round(inv_logit_scaled(rnorm(trials, 0, sd))*9, 0)
   while (max(rating1) > 8 | min(rating1) < 1){
-    rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, sd))*9, 0)
+    rating1 <- round(inv_logit_scaled(rnorm(trials, 0, sd))*9, 0)
   }
   return(rating1)
 }
+```
+
+```{r}
+sd = 0.8
+hep <- sim_data_SB(trials, bias, sd)
+hep %>% ggplot() +
+  aes(rating1) + 
+  geom_histogram()
 ```
 
 
@@ -157,8 +165,8 @@ sim_d_and_fit_SB <- function(seed, trials, bias, sd){
 # values
 seed <- 1985
 bias <- 0
-trials <- 80
-sd <- 0.85
+trials <- 150
+sd <- 0.8
 ```
 
 # checking simulated data
@@ -182,8 +190,8 @@ test_SB <- sim_d_and_fit_SB(seed, trials, bias, sd)
 
 ```{r}
 #round(test_SB$lok_lik*9,0)
-min(test_SB$log_lik)
-max(test_SB$log_lik)
+min(test_SB$`log_lik[1]`)
+max(test_SB$`log_lik[1]`)
 
 ```
 
@@ -191,6 +199,14 @@ max(test_SB$log_lik)
 ```{r}
 test_SB %>% ggplot() + 
   aes(`post_preds[1]`) + geom_histogram()
+```
+```{r}
+test_SB %>% 
+  mutate(
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
+  select(predictions) %>% 
+  slice(1)
+
 ```
 
 ```{r}
@@ -210,18 +226,31 @@ pacman::p_load(boot, ggpubr)
 
 # bias 
 ggplot(test_SB) +
-  geom_density(aes(inv.logit(bias_posterior)), fill="blue", alpha=0.3) +
-  geom_density(aes(inv.logit(bias_prior)), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  geom_density(aes(bias_posterior), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
   xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
   labs(title = "Bias")#+
   #coord_cartesian(xlim = c(0,1))
 
+test_SB %>% ggplot() + 
+  geom_density(aes(SD_post), fill = "blue", alpha = 0.3) + 
+ # geom_density(aes(SD_prior), fill = 'red', alpha = 0.3) + 
+  ylab("Posterior Density") + 
+  theme_classic() + 
+  labs(title = "SD")
+
+test_SB %>% ggplot() + 
+  #geom_density(aes(SD), fill = "blue", alpha = 0.3) + 
+  geom_density(aes(SD_prior), fill = 'red', alpha = 0.3) + 
+  ylab("Posterior Density") + 
+  theme_classic() + 
+  labs(title = "SD")
+
 #ggsave("plots/model_pp_update.png", width = 1300, height = 700, units = 'px', dpi = 150)
 # 2000 1150
 ```
-
 
 # Weighted Bayes functions
 
@@ -315,12 +344,12 @@ sim_d_and_fit_WB <- function(trials, weight_self, weight_other, bias, sd){
 ```
 
 ```{r values}
-# values
-bias <- 0.3
+# WB values
+bias <- 0
 trials <- 80
-weight_self <- 0.3
-weight_other <- 0.4
-sd <- 0.85
+weight_self <- 0.7
+weight_other <- 0.8
+sd <- 0.8
 ```
 
 # checking simulated data
@@ -344,8 +373,8 @@ test_WB <- sim_d_and_fit_WB(trials, weight_self, weight_other, bias, sd)
 # checking the data outcome  WB
 
 ```{r}
-min(test_WB$log_lik)
-max(test_WB$log_lik)
+min(test_WB$`log_lik[1]`)
+max(test_WB$`log_lik[1]`)
 
 ```
 
@@ -408,6 +437,22 @@ ggplot(test_WB) +
   theme_classic() + 
   labs(title = "W_other")#+
   #coord_cartesian(xlim = c(0,1))
+
+# SD 
+test_WB %>% ggplot() + 
+  geom_density(aes(SD_post), fill = "blue", alpha = 0.3) + 
+ # geom_density(aes(SD_prior), fill = 'red', alpha = 0.3) + 
+  ylab("Posterior Density") + 
+  theme_classic() + 
+  labs(title = "SD")
+
+test_WB %>% ggplot() + 
+  #geom_density(aes(SD), fill = "blue", alpha = 0.3) + 
+  geom_density(aes(SD_prior), fill = 'red', alpha = 0.3) + 
+  ylab("Posterior Density") + 
+  theme_classic() + 
+  labs(title = "SD")
+
 
 #ggsave("plots/model_pp_update.png", width = 1300, height = 700, units = 'px', dpi = 150)
 # 2000 1150
