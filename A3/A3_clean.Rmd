@@ -133,6 +133,28 @@ samples <- mod_simpleBayes$sample(
 draws_df <- as_draws_df(samples$draws())
 ```
 
+```{r}
+draws_df %>% mutate(
+  rating2_choice = round(rating2_est*9,0)
+) %>% 
+  ggplot() + 
+  aes(rating2_choice) + 
+  geom_histogram()
+  
+round(draws_df$rating2_est*9,0)
+min(round(draws_df$rating2_est*9,0))
+max(round(draws_df$rating2_est*9,0))
+
+```
+
+```{r}
+# testing SB model 
+ # target += inv_logit(normal_lpdf(rating2_logit | bias + 0.5 * to_vector(rating1_logit) + 0.5 * to_vector(other_logit), #0.2)); // outputs log odds 
+
+tester <- bias + 0.5 * qlogis(0.4444444) + 0.5 * qlogis(0.6666667)
+inv.logit(tester)
+```
+
 
 # when chains work, use the code below
 
@@ -391,5 +413,18 @@ samples <- model_WB$sample(
 
 ```{r}
 draws_df <- as_draws_df(samples$draws())
+```
+
+```{r}
+draws_df %>% mutate(
+  rating2_choice = round(rating2_est*9,0)
+) %>% 
+  ggplot() + 
+  aes(rating2_choice) + 
+  geom_bar() + 
+  
+  ggplot() + 
+  aes(round(rating2_est*9,0)) + 
+  geom_density()
 ```
 
