@@ -358,8 +358,8 @@ sim_d_and_fit_WB <- function(trials, weight_self, weight_other, bias, sd, caterp
   
   samples <- model_WB$sample(
     data = data_weighted_Bayes,
-    #fixed_param = TRUE,
-    seed = 1985,
+    fixed_param = FALSE,
+    #seed = 1985,
     chains = 2,
     parallel_chains = 2,
     threads_per_chain = 2,
@@ -390,7 +390,7 @@ sd <- 0.8
 
 # checking simulated data
 ```{r generate data}
-WB_data <- sim_data_WB(trials, weight_self, weight_other, bias, sd, caterpillar = F)
+WB_data <- sim_data_WB(trials, weight_self, weight_other, bias, sd)
 ```
 
 ## Fitting the WB model
@@ -501,6 +501,7 @@ test_WB %>% ggplot() +
 # get caterpillar plots
 samples_WB <- sim_d_and_fit_WB(trials, weight_self, weight_other, bias, sd, caterpillar = T)
 ```
+
 ```{r}
 samples_WB$cmdstan_diagnose()
 
