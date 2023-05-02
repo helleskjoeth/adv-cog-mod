@@ -49,32 +49,32 @@ model {
   }
 }
 
-// generated quantities {
-//   real bias_prior;
-//   real bias_posterior;
-//   real w_self_prior;
-//   //real w_self_posterior;
-//   real w_other_prior;
-//   //real w_other_posterior;
-//   array[trials] real log_lik; // to be used for model comparison
-//   array[trials] real post_preds;
-//   real SD_prior;
-//   real SD_post;
-//   
-//   bias_prior = normal_rng(0,1);
-//   w_self_prior = normal_rng(0.75, 0.1);
-//   w_other_prior = normal_rng(0.75, 0.1);
-//   SD_prior = exponential_rng(10);
-//   SD_post = SD;
-// 
-//   
-//   bias_posterior = bias;
-//   //w_self_posterior = w_self;
-//   //w_other_posterior = w_other;
-//   
-//   for (t in 1:trials){
-//     log_lik[t] = normal_lpdf(rating2_logit | bias + weight_self * to_vector(rating1_logit) + weight_other * to_vector(other_logit), SD);
-//     }  
-//   post_preds = normal_rng(bias + weight_self * to_vector(rating1_logit) + weight_other * to_vector(other_logit), SD);
-// } 
+generated quantities {
+  real bias_prior;
+  real bias_posterior;
+  real w_self_prior;
+  //real w_self_posterior;
+  real w_other_prior;
+  //real w_other_posterior;
+  array[trials] real log_lik; // to be used for model comparison
+  array[trials] real post_preds;
+  real SD_prior;
+  real SD_post;
+
+  bias_prior = normal_rng(0,1);
+  w_self_prior = normal_rng(0.75, 0.1);
+  w_other_prior = normal_rng(0.75, 0.1);
+  SD_prior = exponential_rng(10);
+  SD_post = SD;
+
+
+  bias_posterior = bias;
+  //w_self_posterior = w_self;
+  //w_other_posterior = w_other;
+
+  for (t in 1:trials){
+    log_lik[t] = normal_lpdf(rating2_logit | bias + weight_self * to_vector(rating1_logit) + weight_other * to_vector(other_logit), SD);
+    }
+  post_preds = normal_rng(bias + weight_self * to_vector(rating1_logit) + weight_other * to_vector(other_logit), SD);
+}
 

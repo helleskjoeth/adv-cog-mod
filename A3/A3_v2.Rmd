@@ -169,7 +169,7 @@ sim_d_and_fit_SB <- function(seed, trials, bias, sd, caterpillar = F){
 # values
 seed <- 1985
 bias <- 0
-trials <- 150
+trials <- 80
 sd <- 0.8
 ```
 
@@ -228,14 +228,22 @@ test_SB %>% mutate(
 ```{r}
 pacman::p_load(boot, ggpubr)
 
-# bias 
+# bias prior
 ggplot(test_SB) +
-  geom_density(aes(bias_posterior), fill="blue", alpha=0.3) +
+  #geom_density(aes(bias_posterior), fill="blue", alpha=0.3) +
   geom_density(aes(bias_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
-  xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
-  labs(title = "Bias")#+
+  labs(title = "Prior distribution of bias ")#+
+  #coord_cartesian(xlim = c(0,1))
+
+# bias posterior 
+ggplot(test_SB) +
+  geom_density(aes(bias_posterior), fill="blue", alpha=0.3) +
+  #geom_density(aes(bias_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Posterior distribution of bias ")#+
   #coord_cartesian(xlim = c(0,1))
 
 test_SB %>% ggplot() + 
@@ -243,14 +251,14 @@ test_SB %>% ggplot() +
  # geom_density(aes(SD_prior), fill = 'red', alpha = 0.3) + 
   ylab("Posterior Density") + 
   theme_classic() + 
-  labs(title = "SD")
+  labs(title = "Posterior distribution of SD")
 
 test_SB %>% ggplot() + 
   #geom_density(aes(SD), fill = "blue", alpha = 0.3) + 
   geom_density(aes(SD_prior), fill = 'red', alpha = 0.3) + 
   ylab("Posterior Density") + 
   theme_classic() + 
-  labs(title = "SD")
+  labs(title = "Prior distribution of SD")
 
 #ggsave("plots/model_pp_update.png", width = 1300, height = 700, units = 'px', dpi = 150)
 # 2000 1150
@@ -444,15 +452,27 @@ test_WB %>% mutate(
 ```{r}
 pacman::p_load(boot, ggpubr)
 
-# bias 
+# bias prior
 ggplot(test_WB) +
-  geom_density(aes(inv.logit(bias_posterior)), fill="blue", alpha=0.3) +
-  geom_density(aes(inv.logit(bias_prior)), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+ # geom_density(aes(inv.logit(bias_posterior)), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
   xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
-  labs(title = "Bias")#+
+  labs(title = "Prior distribution of bias")#+
   #coord_cartesian(xlim = c(0,1))
+
+
+# bias post
+ggplot(test_WB) +
+  geom_density(aes(bias_posterior), fill="blue", alpha=0.3) +
+ # geom_density(aes(inv.logit(bias_prior)), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Posterior distribution of bias")#+
+  #coord_cartesian(xlim = c(0,1))
+
 
 # w1 - not sure about the scale
 ggplot(test_WB) +
