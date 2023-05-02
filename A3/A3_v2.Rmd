@@ -127,7 +127,7 @@ sim_data_SB <- function(trials, bias, sd){
 ```
 
 ```{r sim_d_and_fit_SB data function}
-sim_d_and_fit_SB <- function(seed, trials, bias, sd){
+sim_d_and_fit_SB <- function(seed, trials, bias, sd, caterpillar = F){
   
   # simulate data
   SB_data = sim_data_SB(trials, bias, sd)
@@ -154,9 +154,13 @@ sim_d_and_fit_SB <- function(seed, trials, bias, sd){
   )
 
   # get samples
-  draws_df <- as_draws_df(samples$draws())
-  
-  return(draws_df)
+  if (caterpillar){
+  return(samples)
+  }
+  else {
+    draws_df <- as_draws_df(samples$draws())
+    return(draws_df)
+  }
 }
 ```
 
@@ -177,13 +181,13 @@ SB_data <- sim_data_SB(trials, bias, sd)
 
 
 ```{r read SB stan file}
-file <- file.path("SB_model.stan")
+file <- file.path("stan/SB_model.stan")
 mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
                      stanc_options = list("O1"))
 ```
 # simulate and fit SB data
 ```{r simulate and fit SB data}
-test_SB <- sim_d_and_fit_SB(seed, trials, bias, sd)
+test_SB <- sim_d_and_fit_SB(seed, trials, bias, sd, caterpillar = F)
 ```
 
 # checking the data outcome  SB
@@ -251,6 +255,33 @@ test_SB %>% ggplot() +
 #ggsave("plots/model_pp_update.png", width = 1300, height = 700, units = 'px', dpi = 150)
 # 2000 1150
 ```
+```{r}
+# getting caterpillar plots 
+samples <- sim_d_and_fit_SB(seed, trials, bias, sd, caterpillar = T)
+```
+
+```{r}
+samples$cmdstan_diagnose()
+
+# Plot hairy caterpillars
+draws_df <- as_draws_df(samples$draws())
+
+# bias
+ggplot(draws_df, aes(.iteration, bias, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Simple Bayes - Bias") +
+  theme_classic()
+
+# SD 
+ggplot(draws_df, aes(.iteration, SD, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Simple Bayes - SD") +
+  theme_classic()
+
+# create plots for w1 and w2, too
+
+```
+
 
 # Weighted Bayes functions
 
@@ -311,7 +342,7 @@ sim_data_WB <- function(trials, weight_self, weight_other, bias, sd){
 
 
 ```{r function: sim d and fit WB}
-sim_d_and_fit_WB <- function(trials, weight_self, weight_other, bias, sd){
+sim_d_and_fit_WB <- function(trials, weight_self, weight_other, bias, sd, caterpillar = F){
   
   sim_data <- sim_data_WB(trials, weight_self, weight_other, bias, sd)
 
@@ -337,9 +368,14 @@ sim_d_and_fit_WB <- function(trials, weight_self, weight_other, bias, sd){
     refresh = 500
     )
   
-  draws_df <- as_draws_df(samples$draws())
-  
-  return(draws_df)
+  # get samples
+  if (caterpillar){
+  return(samples) # allows for cmdstan diagnosis
+  }
+  else {
+    draws_df <- as_draws_df(samples$draws()) # returns dataframe format
+    return(draws_df)
+  }
 }
 ```
 
@@ -354,13 +390,13 @@ sd <- 0.8
 
 # checking simulated data
 ```{r generate data}
-WB_data <- sim_data_WB(trials, weight_self, weight_other, bias, sd)
+WB_data <- sim_data_WB(trials, weight_self, weight_other, bias, sd, caterpillar = F)
 ```
 
 ## Fitting the WB model
 ```{r import stan WB model}
 ## Specify where the model is
-file <- file.path("WB_model.stan")
+file <- file.path("stan/WB_model.stan")
 model_WB <- cmdstan_model(file, 
                      cpp_options = list(stan_threads = TRUE),
                      stanc_options = list("O1"))
@@ -459,4 +495,41 @@ test_WB %>% ggplot() +
 
 ```
 
+# Model quality 
+
+```{r}
+# get caterpillar plots
+samples_WB <- sim_d_and_fit_WB(trials, weight_self, weight_other, bias, sd, caterpillar = T)
+```
+```{r}
+samples_WB$cmdstan_diagnose()
+
+# Plot hairy caterpillars
+draws_df_WB <- as_draws_df(samples_WB$draws())
+
+# bias
+ggplot(draws_df_WB, aes(.iteration, bias, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - Bias") +
+  theme_classic()
+
+# SD 
+ggplot(draws_df_WB, aes(.iteration, SD, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - SD") +
+  theme_classic()
+
+# w1
+ggplot(draws_df_WB, aes(.iteration, w_self_posterior, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted - w_self") +
+  theme_classic()
+
+# w2
+ggplot(draws_df_WB, aes(.iteration, w_other_posterior, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted - w_self") +
+  theme_classic()
+
+```
 
