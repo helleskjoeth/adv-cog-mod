@@ -1,0 +1,394 @@
+---
+title: "A3"
+author: "Sigrid Agersnap Bom Nielsen"
+date: "2023-04-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, include=FALSE}
+library(pacman)
+pacman::p_load(tidyverse, 
+               brms,
+               cmdstanr,
+               patchwork,
+               boot)
+```
+
+# functions
+
+```{r simple bayes f}
+SimpleBayes_f <- function(bias, rating1, other){
+  outcome <- inv_logit_scaled(bias + 0.5*logit_scaled(rating1) +0.5*logit_scaled(other))
+  
+  return(outcome)
+}
+```
+
+```{r weighted bayes f}
+WeightedBayes_f <-  function(bias, rating1, other, weight_self, weight_other){
+  w1 <- 0.5 * weight_self + 0.5 # transform from a [0;1] space to a [0.5;1] space
+  w2 <- 0.5 * weight_other + 0.5
+  outcome <- inv_logit_scaled(bias + w1 * logit_scaled(rating1) + w2 * logit_scaled(other))
+  return(outcome)
+}
+```
+
+############################## Simple Bayes ###############################
+
+# simulate data for SB
+
+```{r sim data}
+# values
+trials <- 100
+bias <- 0
+
+# empty lists
+trial_no <- rep(NA, trials)
+feedback <- rep(NA, trials)
+rating1 <- rep(NA, trials)
+other <- rep(NA, trials)
+rating2 <- rep(NA,trials)
+
+# creating rating and other
+for (i in 1:trials){
+  rating1[i] <- round(inv_logit_scaled(rnorm(1, 0, 0.85))*9, 0)
+
+  
+  rating1[i] = ifelse(rating1[i] > 8, 8,
+                      ifelse(rating1[i]<1, 1, 
+                             rating1[i]))
+
+  #while (rating1[i] > 8 || rating1[i] < 1){
+  #  rating[i] = round(inv_logit_scaled(rnorm(1, 0, 0.85))*9, 0)
+  #}
+
+  feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+  other[i] = rating1[i] + feedback_temp
+  
+  other[i] = ifelse(other[i] > 8, 8,
+                      ifelse(other[i]<1, 1, 
+                             other[i]))
+  
+  # while (other[i]>8 || other[i]<1){
+  #  feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+  #   other[i] = rating1[i] + feedback_temp
+  # }
+  
+  # saving variables
+  feedback[i] = feedback_temp
+  trial_no[i] = i
+}
+
+# create probs
+rating1_probability = rating1/9
+other_probability = other/9
+
+# create rating2
+rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability)
+
+# fixing bounds for probability
+for(i in 1:trials){
+  rating2_probability[i] = ifelse(
+    rating2_probability[i] > 0.92, 0.88,
+      ifelse(rating2_probability[i] < 0.09, 0.11,
+             rating2_probability[i])
+    )
+}
+# make rating 2 not prob
+rating2 = round(rating2_probability * 9, 0)
+
+# save in df
+df_SB <- tibble(trial_no, bias, rating1, other, feedback, rating2, rating1_probability, other_probability, rating2_probability)
+```
+
+
+```{r load SB stan file}
+file <- file.path("stan/SB_model.stan")
+mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+```{r draw samples}
+# make data list
+  data_simpleBayes <- list(
+  trials = trials,
+  rating2 = df_SB$rating2_probability, # outcome variable
+  rating1 = df_SB$rating1_probability, # parameter
+  other = df_SB$other_probability # parameter
+)
+
+  # fit model to data
+samples_SB <- mod_simpleBayes$sample(
+  data = data_simpleBayes,
+ # fixed_param = TRUE,
+  seed = 1985,
+  chains = 2,
+  parallel_chains = 2,
+  threads_per_chain = 2,
+  iter_warmup = 1500,
+  iter_sampling = 3000,
+  refresh = 500
+)
+
+```
+
+# SB diagnostics
+```{r stan diagnose}
+samples_SB$cmdstan_diagnose() 
+```
+
+#chains 
+```{r chains}
+draws_SB <- as_draws_df(samples_SB$draws())
+
+# bias
+ggplot(draws_SB, aes(.iteration, bias, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Simple Bayes - Bias") +
+  theme_classic()
+
+# SD 
+ggplot(draws_SB, aes(.iteration, SD, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Simple Bayes - SD") +
+  theme_classic()
+```
+As expected, it cannot really estimate SD.
+
+# SB prior and posterior update plots
+```{r}
+pacman::p_load(boot)
+# bias
+ggplot(draws_SB) +
+  geom_density(aes(bias), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Post + prior distribution of bias")
+
+# sd prior
+ggplot(draws_SB) +
+#  geom_density(aes(SD), fill="blue", alpha=0.3) +
+  geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Prior distribution of SD")
+
+# sd post
+ggplot(draws_SB) +
+  geom_density(aes(SD), fill="blue", alpha=0.3) +
+#  geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Post distribution of SD")
+```
+If I run the above with bias = 0, bias is being estimated (although, it is estimated to be very close to 0 with little variance). If I, however, set bias = 0.5, the bias is not being estimated at all, but is fixed at 0.5...... that doesn't make sense to me.
+
+
+# Post preds
+```{r post preds plot}
+draws_SB %>% mutate(
+  preds = round(inv_logit_scaled(`post_preds[5]`)*9, 0)
+) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) 
+```
+
+
+
+############################## Weighted Bayes ###############################
+# simulate data for WB
+
+```{r}
+trials <- 100
+bias <- 0.5
+weight_self <- 0.2
+weight_other <- 0.7
+
+
+# empty lists
+trial_no <- rep(NA, trials)
+feedback <- rep(NA, trials)
+rating1 <- rep(NA, trials)
+other <- rep(NA, trials)
+rating2 <- rep(NA,trials)
+
+for (i in 1:trials){
+  rating1[i] <- round(inv_logit_scaled(rnorm(1, 0, 0.85))*9, 0)
+
+  
+  rating1[i] = ifelse(rating1[i] > 8, 8,
+                      ifelse(rating1[i]<1, 1, 
+                             rating1[i]))
+
+  #while (rating1[i] > 8 || rating1[i] < 1){
+  #  rating[i] = round(inv_logit_scaled(rnorm(1, 0, 0.85))*9, 0)
+  #}
+
+  feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+  other[i] = rating1[i] + feedback_temp
+  
+  other[i] = ifelse(other[i] > 8, 8,
+                      ifelse(other[i]<1, 1, 
+                             other[i]))
+  
+  # while (other[i]>8 || other[i]<1){
+  #  feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+  #   other[i] = rating1[i] + feedback_temp
+  # }
+  
+  # saving variables
+  feedback[i] = feedback_temp
+  trial_no[i] = i
+}
+
+# create probs
+rating1_probability = rating1/9
+other_probability = other/9
+
+# rating 2
+rating2_probability = WeightedBayes_f(bias, rating1_probability, other_probability, weight_self, weight_other)
+
+# fixing bounds for probability
+for(i in 1:trials){
+  rating2_probability[i] = ifelse(
+    rating2_probability[i] > 0.92, 0.88,
+      ifelse(rating2_probability[i] < 0.09, 0.11,
+             rating2_probability[i])
+    )
+}
+
+rating2 = round(rating2_probability * 9, 0)
+
+# save in df
+df_WB <- tibble(
+  trial_no, bias, weight_self, weight_other, rating1, other, feedback, rating2, rating1_probability, other_probability, rating2_probability)
+```
+
+# stan file
+```{r}
+file <- file.path("stan/WB_model.stan")
+model_WB <- cmdstan_model(file, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+# draw samples
+```{r}
+data_weighted_Bayes <- list(
+  trials = trials,
+  rating2 = df_WB$rating2_probability, # outcome variable
+  rating1 = df_WB$rating1_probability, # parameter
+  other = df_WB$other_probability # parameter
+)
+
+samples_WB <- model_WB$sample(
+    data = data_weighted_Bayes,
+    fixed_param = FALSE,
+    seed = 1985,
+    chains = 2,
+    parallel_chains = 2,
+    threads_per_chain = 2,
+    iter_warmup = 1500,
+    iter_sampling = 3000,
+    refresh = 500
+    )
+```
+
+
+# stan diagnostics
+```{r}
+samples_WB$cmdstan_diagnose() # all good
+```
+No divergent transitions, treedepth is good, etc. 
+
+# chains
+```{r}
+draws_WB <- as_draws_df(samples_WB$draws())
+
+# Plot hairy caterpillars
+# bias
+ggplot(draws_WB, aes(.iteration, bias, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - Bias") +
+  theme_classic()
+
+# SD 
+ggplot(draws_WB, aes(.iteration, SD, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - SD") +
+  theme_classic()
+
+# w1
+ggplot(draws_WB, aes(.iteration, w_self, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted - w_self") +
+  theme_classic()
+
+# w2
+ggplot(draws_WB, aes(.iteration, w_other, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted - w_self") +
+  theme_classic()
+
+```
+chains look good
+
+# prior and posterior update plots
+
+```{r}
+# bias
+ggplot(draws_WB) +
+  geom_density(aes(bias), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Prior and post distribution of bias")
+
+# sd
+ggplot(draws_WB) +
+  geom_density(aes(SD), fill="blue", alpha=0.3) +
+  geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Prior and post distribution of bias")
+
+# weight self
+ggplot(draws_WB) +
+  geom_density(aes(w_self), fill="blue", alpha=0.3) +
+  geom_density(aes(w_self_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Prior and post distribution of weight self")
+
+# weight other
+ggplot(draws_WB) +
+  geom_density(aes(w_other), fill="blue", alpha=0.3) +
+  geom_density(aes(w_other_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Prior and post distribution of weight other")
+```
+
+
+# post preds plot
+```{r}
+pacman::p_load(boot, scales)
+
+draws_WB %>% mutate(
+  preds = round(inv_logit_scaled(`post_preds[3]`)*9, 0)
+) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) 
+
+# not a lot of variance in the post preds. does that mean that the model is very certain?
+
+```

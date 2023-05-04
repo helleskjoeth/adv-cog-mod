@@ -33,16 +33,16 @@ model {
 
 generated quantities {
   real bias_prior;
-  real bias_posterior;
+  //real bias_posterior;
   array[trials] real log_lik; // to be used for model comparison
   array[trials] real post_preds;
   real SD_prior;
-  real SD_post;
+//  real SD_post;
   
   bias_prior = normal_rng(0,1);
-  bias_posterior = bias;
+ // bias_posterior = bias;
   SD_prior = exponential_rng(10);
-  SD_post = SD;
+//  SD_post = SD;
 
   for (t in 1:trials){
     log_lik[t] = normal_lpdf(rating2_logit | bias + 0.5 * to_vector(rating1_logit) + 0.5 * to_vector(other_logit), SD);
