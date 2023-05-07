@@ -5,16 +5,18 @@ data {
   int <lower = 1> trials; // trials = total number of trials 
   array[trials] real <lower = 0, upper = 1> rating1; // probability scale
   array[trials] real <lower = 0, upper = 1> other; // probability scale
-  array[trials] real <lower = 0, upper = 1> rating2; // probability scale
+  //array[trials] real <lower = 0, upper = 1> rating2; // probability scale
+  vector[trials] rating2; // 1-8 scale
 }
 
 transformed data {
   array[trials] real rating1_logit;
   array[trials] real other_logit;
-  array[trials] real rating2_logit;
+  //array[trials] real rating2_logit;
+  vector[trials] rating2_logit;
   rating1_logit = logit(rating1); // log odds
   other_logit = logit(other); // log odds
-  rating2_logit = logit(rating2); // log odds
+  rating2_logit = logit(rating2/9); // log odds
 }  
 
 parameters {
@@ -48,21 +50,25 @@ model {
 
 generated quantities {
   real bias_prior;
+  real SD_prior;
   real w_self_prior;
   real w_other_prior;
   array[trials] real log_lik;
   array[trials] real post_preds;
-  real SD_prior;
 
   bias_prior = normal_rng(0,1);
+  SD_prior = exponential_rng(10);
   w_self_prior = normal_rng(0.75, 0.1);
   w_other_prior = normal_rng(0.75, 0.1);
-  SD_prior = exponential_rng(10);
+
   
   for (t in 1:trials){
-    log_lik[t] = normal_lpdf(rating2_logit | bias + w_self * to_vector(rating1_logit) + w_other * to_vector(other_logit), SD);
-    }
-    
-  post_preds = normal_rng(bias + w_self * to_vector(rating1_logit) + w_other * to_vector(other_logit), SD);
+    log_lik[t] = normal_lpdf(rating2_logit[t] | bias + w_self * to_vector(rating1_logit)[t] + w_other * to_vector(other_logit)[t], SD);
+  }
+  
+ // post_preds = normal_rng(bias + w_self * to_vector(rating1_logit) + w_other * to_vector(other_logit), SD);
+  for (t in 1:trials){
+    post_preds[t] = normal_rng(bias + 0.5 * to_vector(rating1_logit)[t] + 0.5 * to_vector(other_logit)[t], SD);
+  }
 }
 
