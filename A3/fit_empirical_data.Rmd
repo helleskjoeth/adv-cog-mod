@@ -34,7 +34,6 @@ cogsci_data$Change <- as.factor(cogsci_data$Change)
 ```
 
 # DATA INSPECTION
-
 ```{r ratings}
 
 # first rating
@@ -87,7 +86,6 @@ cogsci_data %>%
 
 
 ```
-
 
 # IMPORT MODELS
 ```{r import model}
@@ -218,58 +216,6 @@ ggplot(draws_SB) +
   labs(title = "Prior and posterior distribution of SD")
 ```
 
-# testing participant 32 and 33 - there is no participant 33
-```{r testing par 32}
-p32_data <- prep_data(cogsci_data, id = 32)
-fit2SB_32 <- fit_model(p32_data, model = "SB", clean = F)
-
-
-fit2SB_32$cmdstan_diagnose()
-
-# Plot hairy caterpillars
-draws_SB <- as_draws_df(fit2SB_32$draws())
-
-# bias
-ggplot(draws_SB, aes(.iteration, bias, group = .chain, color=.chain)) + 
-  geom_line() +
-  labs(title = "Simple Bayes - Bias") +
-  theme_classic()
-
-# SD 
-ggplot(draws_SB, aes(.iteration, SD, group = .chain, color=.chain)) + 
-  geom_line() +
-  labs(title = "Simple Bayes - SD") +
-  theme_classic()
-
-
-# check participant 1, trial 1 - GOOD FIT
-draws_SB %>% mutate(
-  predictions = round(inv_logit_scaled(`post_preds[7]`)*9, 0)) %>% 
-  ggplot() + 
-  aes(predictions) + 
-  geom_histogram(fill = "#36802d") + 
-  geom_vline(xintercept = 6, linetype="dotted", 
-                color = "red", size=1) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) +
-  theme_bw()+ 
-  labs(title = "Simple Bayes fit to participant 32, faceID 8, trial 7")
-
-
-# check participant 32, trial 2 - WORSE FIT
-draws_SB %>% mutate(
-  predictions = round(inv_logit_scaled(`post_preds[8]`)*9, 0)) %>% 
-  ggplot() + 
-  aes(predictions) + 
-  geom_histogram(fill = "#36802d") + 
-  geom_vline(xintercept = 7, linetype="dotted", 
-                color = "red", size= 1) +
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
-  theme_bw()+ 
-  labs(title = "Simple Bayes fit to participant 1, faceID 9, trial 8")
-```
-
-
-
 ```{r plot fit to SB}
 # code requires running fit_model with clean = T
 # p1 <- cogsci_data %>% 
@@ -321,7 +267,6 @@ draws_SB %>% mutate(
 ```{r fit to WB}
 # test
 fit2WB <- fit_model(p1_data,  model = "WB", clean = F)
-
 ```
 
 ```{r check model quality}
@@ -437,7 +382,7 @@ draws_WB %>% mutate(
   labs(title = "Simple Bayes fit to participant 1, trial 10, faceID 19")
 
 ```
-# Model comparison - Sigrid's version
+# Model comparison - Sigrid's version - testing stuff
 ```{r}
 Loo_SB <- fit2SB$loo(save_psis = TRUE, cores = 4)
 Loo_WB <- fit2WB$loo(save_psis = TRUE, cores = 4)
@@ -538,10 +483,10 @@ processing_time <- end_time - start_time
 ```
 
 ```{r}
-# copy the df
+# copy the df of the first run (1:32) and run code above from 34:45
 MC_data1 <- MC_data
 
-# rbind full df
+# rbind full df when code has been run through all participants
 MC_data_full <- rbind(MC_data1,MC_data)
 
 # copy name so I don't have to change the next chunks of code
