@@ -67,23 +67,24 @@ for (i in 1:trials){
 
   rating1_probability[i] = rating1[i]/9
   
-  # from Kathrine's code
+  # from Kathrine's code - fixing bounds
   other[i] <- 0
   while (other[i] < 1 | other[i] > 8){ # while group rating out of scope
     feedback[i] <- sample(c(-3, -2, 0, 2, 3), 1, replace = TRUE)
     other[i] = rating1[i] + feedback[i]
   }
   
+  # saving variables
   trial_no[i] = i
   other_probability[i] = other[i]/9
 
 # create rating2
   rating2_probability[i] = SimpleBayes_f(bias, rating1_probability[i], other_probability[i])
 
+  # fixing bounds of rating2
   rating2[i] <- ifelse(round(rating2_probability[i]*9,0) <1, 1,
                        ifelse(round(rating2_probability[i]*9,0) > 8, 8,
                        round(rating2_probability[i]*9, 0)))
-
 }
 
 # save in df
@@ -108,7 +109,7 @@ mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
 #   other = df_SB$other_probability # parameter
 # )
 
-# kathrine's model
+# testing kathrine's model
 # # make data list
 #   data_simpleBayes <- list(
 #   trials = ntrials,
@@ -125,7 +126,6 @@ mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
   rating1 = df_SB$rating1_probability, # parameter
   other = df_SB$other_probability # parameter
 )
-
 
   # fit model to data
 samples_SB <- mod_simpleBayes$sample(
@@ -145,10 +145,8 @@ samples_SB <- mod_simpleBayes$sample(
 # SB diagnostics
 ```{r stan diagnose}
 samples_SB$cmdstan_diagnose() 
-
 samples_SB$summary()
 samples_SB$loo()
-
 ```
 
 #chains 
@@ -167,10 +165,6 @@ ggplot(draws_SB, aes(.iteration, SD, group = .chain, color=.chain)) +
   labs(title = "Simple Bayes - SD") +
   theme_classic()
 ```
-It cannot really estimate SD when bias is 0.
-It can, however estimate SD when bias does not equal 0.
-But when bias = 0,5, the estimate of bias is fixed at 0.5...
-
 # SB prior and posterior update plots
 ```{r}
 pacman::p_load(boot)
@@ -182,27 +176,14 @@ ggplot(draws_SB) +
   theme_classic() + 
   labs(title = "Post + prior distribution of bias")
 
-# sd prior
+# sd 
 ggplot(draws_SB) +
   geom_density(aes(SD), fill="blue", alpha=0.3) +
   geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
   ylab("Posterior Density") +
   theme_classic() + 
-  labs(title = "Prior distribution of SD")
-
-# sd post
-ggplot(draws_SB) +
-  geom_density(aes(SD), fill="blue", alpha=0.3) +
-#  geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
-  ylab("Posterior Density") +
-  theme_classic() + 
-  labs(title = "Post distribution of SD")
+  labs(title = "Prior and posterior distribution of SD")
 ```
-Bias is estimated to be around zero, when the data is simulated with bias = 0.
-
-If I run the above with bias = 0, bias is being estimated (although, it is estimated to be very close to 0 with little variance). If I, however, set bias = 0.5, the bias is not being estimated at all, but is fixed at 0.5...... that doesn't make sense to me.
-
-
 # Post preds
 ```{r post preds plot}
 draws_SB %>% mutate(
@@ -228,7 +209,6 @@ bias <- 0.5
 weight_self <- 0.2
 weight_other <- 0.7
 
-
 # empty lists
 trial_no <- rep(NA, trials)
 feedback <- rep(NA, trials)
@@ -249,7 +229,7 @@ for (i in 1:trials){
 
   rating1_probability[i] = rating1[i]/9
 
-  # from Kathrine's code
+  # from Kathrine's code - fixing bounds
   other[i] <- 0
   while (other[i] < 1 | other[i] > 8){ # while group rating out of scope
     feedback[i] <- sample(c(-3, -2, 0, 2, 3), 1, replace = TRUE)
@@ -260,10 +240,12 @@ for (i in 1:trials){
   trial_no[i] = i
   other_probability[i] = other[i]/9
   
+  # create rating 2
   rating2_probability[i] = WeightedBayes_f(
     bias, rating1_probability[i], other_probability[i], weight_self, weight_other
     )
 
+  # fixing bounds of rating2
   rating2[i] <- ifelse(round(rating2_probability[i]*9,0) <1, 1,
                        ifelse(round(rating2_probability[i]*9,0) > 8, 8,
                        round(rating2_probability[i]*9, 0)))
@@ -273,7 +255,6 @@ for (i in 1:trials){
 df_WB <- tibble(
   trial_no, bias, weight_self, weight_other, rating1, other, feedback, rating2, rating1_probability, other_probability, rating2_probability)
 ```
-
 
 # stan file
 ```{r}
@@ -293,7 +274,7 @@ model_WB <- cmdstan_model(file,
 #   other = df_WB$other_probability # parameter
 # )
 
-# from kathrines model
+# testing kathrine's model
 # data_weighted_Bayes <- list(
 #   trials = ntrials,
 #   rating2 = w_df$temp_c, # outcome variable
@@ -301,7 +282,7 @@ model_WB <- cmdstan_model(file,
 #   other = w_df$Source2 # parameter
 # )
 
-# experiment with rating2 on 1-8 scale
+# experiment with rating2 on 1-8 scale - works
 data_weighted_Bayes <- list(
   trials = trials,
   rating2 = df_WB$rating2, # outcome variable
@@ -328,7 +309,6 @@ samples_WB <- model_WB$sample(
 samples_WB$cmdstan_diagnose() # all good
 samples_WB$summary()
 samples_WB$loo()
-
 ```
 No divergent transitions, treedepth is good, etc. 
 
@@ -418,8 +398,6 @@ draws_WB %>% mutate(
 ) %>% 
   ggplot() + 
   geom_histogram(aes(preds)) 
-
-
 
 # not a lot of variance in the post preds. does that mean that the model is very certain?
 
