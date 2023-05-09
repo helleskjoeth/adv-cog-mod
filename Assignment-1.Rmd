@@ -15,50 +15,61 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r}
-library(tidyverse)
 
-set.seed(1997)
-
+<<<<<<< HEAD
 ```
 
 Random bot - capitalist (coin holder)
 
 ```{r}
+=======
+library(pacman, RcolorBrewer)
+library(plyr)
+p_load(ggplot2, tidyverse, scales, reshape2, pastecs, ggthemes, patchwork)
+
+
+```
+
+
+# FUNCTIONS
+
+## Agent functions
+
+### Random bot - capitalist (coin holder)
+
+```{r random bot function}
+>>>>>>> 62271613dd232250e4438d78eb008799c7b48f33
 
 random_agent <- function(bias) {
   choice <- rbinom(1,1, bias)
   return(choice)
 }
 
-bias <- 0.5
-
-random_choice <- random_agent(bias)
-random_choice
-
 ```
-Running random agent 120 trials 
 
-```{r}
-trials <- 120
+### Win-stay-lose-shift bot - capitalist (coin holder)
 
-random_choice <- rep(NA, trials)
+```{r wsls bot function}
 
-for(trial in seq(trials)) {
-  random_choice[trial] <- random_agent(bias)
+win_stay_agent <- function(prev_choice, feedback) {
+  if (feedback == 1){
+    choice = prev_choice
+  } 
+  else if (feedback == 0){
+    choice = 1-prev_choice
+  }
+  return(choice)
 }
 
-df1 <- tibble(trial = seq(trials), choice = random_choice)
-
-
-
 ```
 
-Our first strategy: win-shift-lose-stay 
+### Competing agent (win-shift)
 
+```{r competing agent function}
 
-```{r}
 #Agent with a strong reaction to loosing, meaning it sticks more to the strategy of staying when losing. 
-win_switch_agent <- function(prev_choice, feedback, bias_lose, bias_win) {
+
+win_shift_agent <- function(prev_choice, feedback, bias_lose, bias_win) {
   if (feedback == 0) { #lose stay
     if(prev_choice == 0) { 
       choice = rbinom(1, 1, (1-bias_lose))}
@@ -75,95 +86,371 @@ win_switch_agent <- function(prev_choice, feedback, bias_lose, bias_win) {
 
 ```
 
-Initialisting biases
+## Other functions
+
+### Simulation function against random agent
+
+```{r simulation function RA}
+
+sim_vs_random <- function(agents, trials, bias_lose, bias_win){
+  
+  feedback <- array(NA, c(agents, trials))
+  performance_df <- data_frame()
+  
+  for (agent in 1:agents){
+    self <- rep(NA, trials)
+    bot <- rep(NA, trials)
+  
+    self[1] <- random_agent(0.5)
+    
+    for(trial in seq(trials)) {
+      bot[trial] <- random_agent(bot_bias)
+    }
+    
+    for (trial in 2:trials){
+      if(self[trial-1] == bot[trial-1]) {
+        feedback[agent, trial] = 1
+      } 
+      else {
+        feedback[agent, trial] = 0
+      }
+      self[trial] <- win_shift_agent(prev_choice = self[trial-1], 
+                                      feedback = feedback[agent, trial], 
+                                      bias_lose = bias_lose, 
+                                      bias_win = bias_win)
+    }
+    
+    df_temp <- tibble(agent = agent, self, bot, trial = seq(trials), 
+                      feedback = as.numeric(self==bot)) %>% 
+      mutate(cumulative_self = cumsum(feedback)/seq_along(feedback),
+             cumulative_bot = cumsum(1-feedback)/seq_along(feedback)) 
+    
+    performance_df <- rbind(performance_df, df_temp)
+    
+  }
+  
+  return(performance_df)
+}
+```
+
+### Simulation function agains win-stay-lose-shift
 
 ```{r}
+sim_vs_wsls <- function(agents, trials, bias_lose, bias_win){
+  feedback <- array(NA, c(agents, trials))
+  performance_df <- data_frame()
+  
+  for (agent in 1:agents){
+    self <- rep(NA, trials)
+    bot <- rep(NA, trials)
+    self[1] <- random_agent(0.5)
+    bot[1] <- random_agent(0.5)
+  
+    for (trial in 2:trials){
+      if (self[trial-1] == bot[trial-1]){
+        feedback[agent, trial] = 1
+        } 
+      else {
+        feedback[agent, trial] = 0
+        }
+      self[trial] <- win_shift_agent(prev_choice = self[trial-1], 
+                                  feedback = feedback[agent, trial], 
+                                  bias_lose = bias_lose_strong, 
+                                  bias_win = bias_win_strong)
+      bot[trial] <- win_stay_agent(prev_choice = bot[trial-1], feedback = 1-feedback[agent,trial])
+    }
+    
+    df_temp <- tibble(agent = agent, self, bot, trial = seq(trials), 
+                      feedback = as.numeric(self==bot)) %>% 
+      mutate(cumulative_self = cumsum(feedback)/seq_along(feedback),
+             cumulative_bot = cumsum(1-feedback)/seq_along(feedback)) 
+    
+    performance_df <- rbind(performance_df, df_temp)
+  }
+  
+  return(performance_df)
+}
+```
+
+### Plot prepping
+
+```{r plot prep}
+
+plot_prep <- function(data){
+  #' Takes the cumulative rates for self and bot and calculates the mean for every trial. 
+  #' Returns a dataframe in long format
+  plot_df <- tibble()
+
+  cumulative_self <- data %>% 
+    dplyr::group_by(trial) %>% 
+    dplyr::summarise(mean(cumulative_self)) %>% 
+    dplyr::rename("Self" = "mean(cumulative_self)")
+
+  cumulative_bot <- data %>% 
+   dplyr::group_by(trial) %>% 
+    dplyr::summarise(mean(cumulative_bot)) %>% 
+    select("mean(cumulative_bot)") %>% 
+    dplyr::rename("Bot" = "mean(cumulative_bot)")
+
+  plot_df <- cbind(cumulative_self, cumulative_bot) %>% 
+    reshape2::melt(id.var = "trial", variable.name = "Player")
+  
+  return(plot_df)
+}
+```
+
+
+## initiating parameters
+
+```{r parameters}
+
+agents <- 100
+trials <- 120
+
 #random agent bias
 bot_bias <- 0.7
 
-# strong tendency to stick with the strategy
+# strong reaction to loosing, meaning it sticks more to the strategy of staying when losing. 
 bias_lose_strong <- 0.9
 bias_win_strong <- 0.7
 
-
-#loss aversive wsls strategy
+# uncertain reaction to loosing, meaning it sticks less to the strategy of staying when losing. 
 bias_lose_weak <- 0.7
 bias_win_weak <- 0.9
 
 ```
 
-playing wsls_strong against our random agent
 
+# AGENT TOURNAMENT 1: win-shift playng against random bot
 
+<<<<<<< HEAD
 ```{r}
 set.seed(1997)
 
 self <- rep(NA, trials)
 bot <- rep(NA, trials)
+=======
+## FIRST STRATEGY: playing win-shift-lose-stay with a strong reaction to loss (strong strategy) against the random agent 
+>>>>>>> 62271613dd232250e4438d78eb008799c7b48f33
 
-self[1] <- random_agent(0.5)
+### Simulation
 
-for(trial in seq(trials)) {
-  bot[trial] <- random_agent(bot_bias)
-}
-
-for (trial in 2:trials){
-  if(self[trial-1] == bot[trial-1]) {
-    feedback = 1
-  } else {feedback = 0}
-  self[trial] <- win_switch_agent(prev_choice = self[trial-1], feedback, bias_lose_strong, bias_win_strong)
-}
-
-
-print(self)
+```{r simulation: strong vs random}
+set.seed(1993)
+performance_df <- sim_vs_random(agents = agents, 
+                                trials = trials, 
+                                bias_lose = bias_lose_strong, 
+                                bias_win = bias_win_strong)
 
 ```
-```{r}
-#Sanity check plot
-performance_df_strong <- tibble(self, bot, trial = seq(trials), feedback = as.numeric(self==bot))
 
+### Sanity check
+
+```{r sanity check: strong vs random}
+#Sanity check plot
+sanity_check_df <- sim_vs_random(agents = 1, 
+                                trials = trials, 
+                                bias_lose = bias_lose_strong, 
+                                bias_win = bias_win_strong)
+
+sanity_strong_vs_random <-sanity_check_df %>% 
+  ggplot() +
+  geom_line(color = "blue", aes(trial, self)) +
+  geom_line(color = "red", aes(trial, bot)) +
+  theme_classic()
+
+```
+
+### Plot the strong win-switch vs random agent
+
+```{r performance plot: strong vs random}
+
+df_strong_vs_random <- plot_prep(performance_df)
+
+strong_vs_random <- ggplot(df_strong_vs_random, aes(trial, value)) +
+  geom_line(aes(color = Player)) +
+  scale_y_continuous(limits = c(0, 1.0)) +
+  theme_stata() +
+  scale_color_gdocs() +
+  labs(title ="Strong win-shift vs. Random Agent", x = " Trial", y = "Cumulative rate") +
+  theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
+
+```
+
+
+## SECOND STRATEGY: playing win-switch-lose-stay with uncertain reaction to loss (i.e. a weak adherence to the strategy when losing)
+
+### Simulation
+
+```{r simulation: weak vs random}
+set.seed(1993)
+performance_df <- sim_vs_random(agents = agents, 
+                                trials = trials, 
+                                bias_lose = bias_lose_weak, 
+                                bias_win = bias_win_weak)
+
+```
+
+### Sanity check
+
+```{r sanity check: weak vs random}
+#Sanity check plot
+sanity_check_df <- sim_vs_random(agents = 1,
+                                trials = trials, 
+                                bias_lose = bias_lose_weak, 
+                                bias_win = bias_win_weak)
+
+<<<<<<< HEAD
 performance_df_strong %>% ggplot() +
   geom_line(color = "red", aes(trial, self)) +
   geom_line(color = "blue", aes(trial, bot))
+=======
+>>>>>>> 62271613dd232250e4438d78eb008799c7b48f33
 
+sanity_weak_vs_random <- sanity_check_df %>% ggplot() +
+  geom_line(color = "blue", aes(trial, self)) +
+  geom_line(color = "red", aes(trial, bot)) +
+  theme_classic()
+
+```
+
+
+### Plot the weak win-switch vs random agent
+
+```{r performance plot: weak vs random}
+
+df_weak_vs_random <- plot_prep(performance_df)
+
+weak_vs_random <- ggplot(df_weak_vs_random, aes(trial, value)) +
+  geom_line(aes(color = Player)) +
+  scale_y_continuous(limits = c(0, 1.0)) +
+  theme_stata() +
+  scale_color_gdocs() +
+  labs(title ="Weak win-shift vs. Random Agent", x = " Trial", y = "Cumulative rate") +
+  theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
 
 
 ```
 
 
+# AGENT TOURNAMENT 2: win-switch playing against win-stay
+
+## FIRST STRATEGY: playing win-switch-lose-stay with a strong reaction to loss (strong strategy) against the random agent 
+
+```{r simulation: strong vs wsls}
+set.seed(1993)
+performance_df <- sim_vs_wsls(agents = agents,
+                              trials = trials,
+                              bias_lose = bias_lose_strong, 
+                              bias_win = bias_win_strong)
 
 
-Plot the strong wsls 
+```
 
-```{r}
-performance_df_strong <- tibble(self, bot, trial = seq(trials), feedback = as.numeric(self==bot))
+### Sanity check
 
-performance_df_strong <- performance_df_strong %>% 
-  mutate(cumulative_self = cumsum(feedback)/seq_along(feedback), 
-         cumulative_bot = cumsum(1-feedback)/ seq_along(feedback))
+```{r sanity check: strong vs wsls}
+#Sanity check plot
+sanity_check_df <- sim_vs_wsls(agents = 1,
+                                trials = trials, 
+                                bias_lose = bias_lose_strong, 
+                                bias_win = bias_win_strong)
 
+sanity_strong_vs_wsls <- sanity_check_df %>%
+  ggplot() +
+  geom_line(color = "blue", aes(trial, self)) +
+  geom_line(color = "red", aes(trial, bot)) +
+  theme_classic()
+```
 
+### Plot the strong wsls 
+
+```{r performance plot: strong vs wsls}
+
+df_strong_vs_wsls <- plot_prep(performance_df)
+
+strong_vs_wsls<- ggplot(df_strong_vs_wsls, aes(trial, value)) +
+  geom_line(aes(color = Player)) +
+  scale_y_continuous(limits = c(0, 1.0)) +
+  theme_stata() +
+  scale_color_gdocs() +
+  labs(title ="Strong win-shift vs. win-stay", x = " Trial", y = "Cumulative rate") +
+  theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
+
+```
+
+## SECOND STRATEGY: playing win-shift-lose-stay with uncertain reaction to loss (i.e. a weak adherence to the strategy when losing)
+
+<<<<<<< HEAD
 performance_df_strong %>% ggplot() +
   geom_line(aes(trial, cumulative_self), color = "red")+
   geom_line(aes(trial, cumulative_bot), color = "blue") +
   theme_minimal()
+=======
+```{r simulation: weak vs wsls}
+set.seed(1993)
+performance_df <- sim_vs_wsls(agents = agents,
+                              trials = trials,
+                              bias_lose = bias_lose_weak, 
+                              bias_win = bias_win_weak)
+```
+>>>>>>> 62271613dd232250e4438d78eb008799c7b48f33
 
+### Sanity check
+
+```{r sanity check: weak vs wsls}
+#Sanity check plot
+sanity_check_df <- sim_vs_wsls(agents = 1,
+                                trials = trials, 
+                                bias_lose = bias_lose_weak, 
+                                bias_win = bias_win_weak)
+
+sanity_weak_vs_wsls <- sanity_check_df %>%
+  ggplot() +
+  geom_line(color = "blue", aes(trial, self)) +
+  geom_line(color = "red", aes(trial, bot)) +
+  theme_classic()
+```
+
+### Plot the weak wsls 
+
+```{r performance plot: weak vs wsls}
+df_weak_vs_wsls <- plot_prep(performance_df)
+
+weak_vs_wsls<- ggplot(df_weak_vs_wsls, aes(trial, value)) +
+  geom_line(aes(color = Player)) +
+  scale_y_continuous(limits = c(0, 1.0)) +
+  theme_stata() +
+  scale_color_gdocs() +
+  labs(title ="Weak win-shift vs. win-stay", x = " Trial", y = "Cumulative rate") +
+  theme(plot.title = element_text(face = "bold", size = 14, hjust=0.5))
 
 ```
 Running the loss aversive wsls agents against the random bot
 
+
+# PLOT DISPLAY
+
+## Plot all games
+
 ```{r}
+<<<<<<< HEAD
 set.seed(1997)
 
 self <- rep(NA, trials)
 bot <- rep(NA, trials)
+=======
+# Tournament 1
+strong_vs_random + weak_vs_random #+ strong_vs_wsls + weak_vs_wsls
+>>>>>>> 62271613dd232250e4438d78eb008799c7b48f33
 
-self[1] <- random_agent(0.5)
+# Tournament 2
+strong_vs_wsls + weak_vs_wsls
+```
 
-for(trial in seq(trials)) {
-  bot[trial] <- random_agent(bot_bias)
-}
+## Plot all sanity checks
 
+<<<<<<< HEAD
 for (trial in 2:trials){
   if(self[trial-1] == bot[trial-1]) {
     feedback = 1
@@ -173,6 +460,15 @@ for (trial in 2:trials){
 
 ```
 
+=======
+```{r}
+# Tournament 1
+sanity_strong_vs_random + sanity_weak_vs_random
+
+# Tournament 2
+sanity_strong_vs_wsls + sanity_weak_vs_wsls
+```
+>>>>>>> 62271613dd232250e4438d78eb008799c7b48f33
 
 ```{r sanity weak random}
 #Sanity check plot

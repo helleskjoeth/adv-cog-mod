@@ -12,7 +12,9 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
-```{r setup, include=FALSE}
+#Libraries and setup
+
+```{r}
 library(pacman)
 pacman::p_load(tidyverse, 
                brms,
@@ -20,9 +22,92 @@ pacman::p_load(tidyverse,
                patchwork)
 ```
 
+
+
+# General functions
+```{r function: first round}
+# function to generate data for rating1
+first_round <- function(trials){
+  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+  while (max(rating1) > 8) {
+    rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+  }
+  return(rating1)
+}
+```
+
+```{r function: other's rating}
+# function to generate other's ratings (feedback)
+other_rating <- function(trials, rating1){
+  # make empty lists
+  trial_no <- rep(NA, trials)
+  feedback <- rep(NA, trials)
+  other <- rep(NA, trials)
+  # sample feedback
+  for (i in 1:trials){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  
+  
+  # make sure other's rating does not go out of bound [1-8]
+  while (other[i]>8 | other[i]<1){
+    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
+    other[i] = rating1[i] + feedback_temp
+  }
+  
+  # save variables
+  feedback[i] = feedback_temp
+  trial_no[i] = i
+  }
+  # save in data frame 
+  df_round1 <- tibble(trial_no, rating1, other, feedback)
+  
+  return(df_round1)
+}
+```
+
+
+
+```{r function: second rating SB and WB}
+# SIMPLE BAYES: function to generate data for second round
+second_round_SB <- function(df, bias){
+  df_temp <- df %>% mutate(
+    rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability))
+  
+  while (max(rating1) > 8){ # ensure no ratings above 8
+    df_temp <- df %>% mutate(
+    rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability))
+  }
+  
+  df <- df_temp %>% mutate (
+    rating2 = round(rating2_probability * 9, 0)) %>% 
+    dplyr::select(trial_no,rating1, other, feedback, rating2,everything())
+  
+  return(df)
+}
+
+# WEIGHTED BAYES: function to generate data for second round
+second_round_WB <- function(df, bias, weight_self, weight_other){
+  df_temp <- df %>% mutate(
+  rating2_probability = WeightedBayes_f(bias, rating1_probability, other_probability, weight_self, weight_other))
+  
+  while (max(rating1) > 8){ # ensure no ratings above 8
+    df_temp <- df %>% mutate(
+    rating2_probability = WeightedBayes_f(bias, rating1_probability, other_probability, weight_self, weight_other))
+  }
+  
+  df <- df_temp %>% mutate (
+    rating2 = round(rating2_probability * 9, 0)) %>% 
+    dplyr::select(trial_no,rating1, other, feedback, rating2,everything())
+  
+  return(df)
+}
+```
+
+
+
 # SIMPLE BAYES
 
-## second try: working
 
 ```{r values}
 # values
@@ -51,7 +136,8 @@ sim_data_SB <- function(trials, bias){
   bias = rep(bias, trials)
   
   # initiate first ratings
-  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
+  rating1 <- first_round(trials)
+  
   # sample feedback
   for (i in 1:trials){
     feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
@@ -92,18 +178,18 @@ sim_data_SB <- function(trials, bias){
 
 ```{r function: simulate data}
 # test function
-SB_data <- sim_data_SB(trials, bias)
+SB_data <- sim_data_SB(80, bias)
 ```
 
 # running stan
 
 ```{r}
 # keep this
-file <- file.path("simple_model.stan")
+file <- file.path("C:/Users/helle/OneDrive - Aarhus Universitet/AU/8th semester/Adv. Cognitive Modelling/adv-cog-mod/A3/simple_model.stan")
 mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
                      stanc_options = list("O1"))
 ```
-
+### testing out SB
 
 ```{r}
 data_simpleBayes <- list(
@@ -182,82 +268,6 @@ sim_d_and_fit <- function(seed, trials, bias){
 test <- sim_d_and_fit(1000, 70, 0)
 ```
 
-```{r}
-0 + 0.5 * qlogis(0.3333333) + 0.5*qlogis(0.6666667)
-```
-```{r}
-pacman::p_load(boot)
-inv.logit(-5.551115e-17)
-```
-
-## weighted bayes 
-
-# General functions
-```{r function: first round}
-# function to generate data for first round
-first_round <- function(trials){
-  rating1 <- round(inv_logit_scaled(rnorm(trials, 0.35, 0.85))*9, 0)
-  return(rating1)
-}
-```
-
-```{r function: other's rating}
-# function to generate other's ratings (feedback)
-other_rating <- function(trials, rating1){
-  # make empty lists
-  trial_no <- rep(NA, trials)
-  feedback <- rep(NA, trials)
-  other <- rep(NA, trials)
-  # sample feedback
-  for (i in 1:trials){
-    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
-    other[i] = rating1[i] + feedback_temp
-  
-  
-  # make sure other's rating does not go out of bound [1-8]
-  while (other[i]>8 | other[i]<1){
-    feedback_temp = sample(c(-3, -2, 0, 2, 3), 1)
-    other[i] = rating1[i] + feedback_temp
-  }
-  
-  # save variables
-  feedback[i] = feedback_temp
-  trial_no[i] = i
-  }
-  # save in data frame 
-  df_round1 <- tibble(trial_no, rating1, other, feedback)
-  
-  return(df_round1)
-}
-```
-
-```{r functions: second round}
-# SIMPLE BAYES: function to generate data for second round
-second_round_SB <- function(df, bias){
-  df <- df %>% mutate(
-    rating2_probability = SimpleBayes_f(bias, rating1_probability, other_probability), 
-    rating2 = round(rating2_probability * 9, 0)
-    ) %>% 
-    select(trial_no,rating1, other, feedback, rating2,everything())
-  
-  return(df)
-}
-```
-
-
-```{r functions: second round}
-# WEIGHTED BAYES: function to generate data for second round
-second_round_WB <- function(df, bias, weight_self, weight_other){
-  df <- df %>% mutate(
-    rating2_probability = WeightedBayes_f(bias, rating1_probability, other_probability, weight_self, weight_other), 
-    rating2 = round(rating2_probability * 9, 0)
-    ) %>% 
-    select(trial_no,rating1, other, feedback, rating2,everything())
-  
-  return(df)
-}
-```
-
 # WEIGHTED BAYES
 
 ```{r values}
@@ -294,7 +304,7 @@ sim_data_WB <- function(trials, weight_self, weight_other, bias){
     other_probability = other/9,
     weight_other = weight_other,
     weight_self = weight_self,
-    bias = bias,
+    bias = bias
   )
   
   # get ratings for second round
@@ -312,7 +322,7 @@ WB_data <- sim_data_WB(trials, weight_self, weight_other, bias)
 
 ```{r import model}
 ## Specify where the model is
-file <- file.path("WB_model.stan")
+file <- file.path("C:/Users/helle/OneDrive - Aarhus Universitet/AU/8th semester/Adv. Cognitive Modelling/adv-cog-mod/A3/WB_model.stan")
 model_WB <- cmdstan_model(file, 
                      cpp_options = list(stan_threads = TRUE),
                      stanc_options = list("O1"))

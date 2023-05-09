@@ -19,19 +19,28 @@ transformed data {
 
 parameters {
   real bias;
+  real stand_dev;
 }
 
 model {
   // priors
   target += normal_lpdf(bias | 0, 1);
-  
+  target += normal_lpdf(stand_dev | 0,1);
   // model 
-  target += inv_logit(normal_lpdf(rating2_logit | bias + 0.5 * to_vector(rating1_logit) + 0.5 * to_vector(other_logit), 0.2)); // outputs log odds 
+  target += normal_lpdf(rating2_logit | bias + 0.5 * to_vector(rating1_logit) + 0.5 * to_vector(other_logit), stand_dev); // outputs log odds 
   //lpdf = log probability density function - log odds
 }
 
-//generated quantities {
+generated quantities {
 //  real bias_prior;
+  //array[trials] real rating2_est;
+  real log_lik;
+  real SD;
   
+  SD = stand_dev;
+  
+  
+  //rating2_est = inv_logit(rating2_logit);
+  log_lik = normal_lpdf(rating2_logit | bias + 0.5 * to_vector(rating1_logit) + 0.5 * to_vector(other_logit), stand_dev);
 //  bias_prior = binomial_rng(0,1);
-//}
+}
