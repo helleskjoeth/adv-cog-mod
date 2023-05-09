@@ -329,49 +329,37 @@ ggplot(draws_gcm) +
   theme_bw()
 ```
 
-# prior and post preds
+# prior and post estimates of parameters
 ```{r}
 draws_gcm %>% ggplot() +
   geom_density(aes(`r[10]`), fill = 'lightblue') +
   geom_density(aes(`r_prior[10]`), fill = 'pink')
-
-
-draws_gcm %>% ggplot() +
-  geom_histogram(aes(`posteriorpred[10]`), fill = 'lightblue') +
-  geom_histogram(aes(`priorpred[10]`), fill = 'pink') + 
-  geom_histogram(aes(`posteriorcorrect[10]`), fill = 'green')
-
-
-draws_gcm %>% ggplot() +
-  geom_bar(aes(`priorpred[10]`), fill = 'pink', position = 'stack') +
-  ggtitle(label = "Prior") + 
-draws_gcm %>% ggplot() +
-  geom_bar(aes(`posteriorpred[10]`), fill = 'lightblue', position = 'stack') +
-  ggtitle(label = "Posterior") +
-draws_gcm %>% ggplot() +
-  geom_bar(aes(`posteriorcorrect[10]`), fill = 'green', position = 'stack') + 
-  ggtitle(label = "Correct")
 ```
+# prior and post preds
 
-```{r}
-plot_preds <- function(draws, trial_no){
+```{r plot_preds function}
+plot_preds <- function(draws, no){
 
-plot <- draws %>% ggplot() +
-  geom_bar(aes(`priorpred[trial_no]`), fill = 'pink', position = 'stack') +
-  ggtitle(label = "Prior") + 
-draws %>% ggplot() +
-  geom_bar(aes(`posteriorpred[trial_no]`), fill = 'lightblue', position = 'stack') +
-  ggtitle(label = "Posterior") +
-draws %>% ggplot() +
-  geom_bar(aes(`posteriorcorrect[trial_no]`), fill = 'green', position = 'stack') + 
-  ggtitle(label = "Correct")
-  
+  prior = paste0("`priorpred[",no,"]`")
+  post = paste0("`posteriorpred[",no, "]`")
+  cor = paste0("`posteriorcorrect[", no, "]`")
+
+  plot = draws %>% ggplot() +
+    geom_bar(aes_string(prior), fill = 'pink', position = 'stack') +
+    ggtitle(label = "Prior") + 
+  draws %>% ggplot() +
+    geom_bar(aes_string(post), fill = 'lightblue', position = 'stack') +
+    ggtitle(label = "Posterior") +
+  draws %>% ggplot() +
+    geom_bar(aes_string(cor), fill = 'lightgreen', position = 'stack') +
+    ggtitle(label = "Correct")
+    
 return(plot)
 }
 ```
 
 ```{r}
-hep <- plot_preds(draws_gcm, '25')
-hep
+plot_preds(draws_gcm, 7)
 ```
+
 
