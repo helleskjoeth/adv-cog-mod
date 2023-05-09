@@ -42,7 +42,7 @@ transformed parameters {
 
   // parameter r (probability of response = category 1)
   array[ntrials] real<lower=0.0001, upper=0.9999> r;
-  array[ntrials] real rr;
+  array[ntrials] real rr; //placeholder for r to insure bounds
 
   for (i in 1: ntrials) {
     
@@ -53,7 +53,7 @@ transformed parameters {
       for (j in 1: nfeatures) {
         tmp_dist[j] = w[j]*abs(obs[e, j] - obs[i, j]);
       }
-      exemplar_sim[e] = exp(-c * sum(tmp_dist));
+      exemplar_sim[e] = exp(-c * sum(tmp_dist)); //sim = similarity
     }
   
     if (sum(cat_one[:(i-1)]) == 0 || sum(cat_zero[:(i-1)]) == 0){ // if there are no examplars in one of the categories
@@ -64,7 +64,7 @@ transformed parameters {
       array[sum(cat_one[:(i-1)])] int tmp_idx_one = cat_one_idx[:sum(cat_one[:(i-1)])];
       array[sum(cat_zero[:(i-1)])] int tmp_idx_zero = cat_zero_idx[:sum(cat_zero[:(i-1)])];
     
-      similarities[1] = sum(exemplar_sim[tmp_idx_one]);
+      similarities[1] = sum(exemplar_sim[tmp_idx_one]); //numerator
       similarities[2] = sum(exemplar_sim[tmp_idx_zero]);
 
      // calculate r[i]
@@ -94,15 +94,76 @@ model {
   // Decision Data
   target += bernoulli_lpmf(choices | r);
 }
+ 
 
 generated quantities {
-    simplex[nfeatures] w_prior;
-    simplex[nfeatures] w_posterior;
-    real logit_c_prior;
-    real logit_c_posterior;
-    array[ntrials] real post_preds;
-  
-    
-    // post_preds = bernoulli_rng(choices | r);
-}
+    // priors
+    simplex[nfeatures] w_prior = dirichlet_rng(w_prior_values);
+    real logit_c_prior = normal_rng(c_prior_values[1], c_prior_values[2]);
+    real<lower=0, upper=2> c_prior = inv_logit(logit_c_prior)*2;
 
+    // prior pred
+    array[ntrials] real<lower=0, upper=1> r_prior;
+    array[ntrials] real rr_prior;
+    for (i in 1:ntrials) {
+
+        // calculate distance from obs to all exemplars
+        array[(i-1)] real exemplar_dist;
+        for (e in 1:(i-1)){
+            array[nfeatures] real tmp_dist;
+            for (j in 1:nfeatures) {
+                tmp_dist[j] = w_prior[j]*abs(obs[e,j] - obs[i,j]);
+            }
+            exemplar_dist[e] = sum(tmp_dist);
+        }
+
+        if (sum(cat_one[:(i-1)])==0 || sum(cat_zero[:(i-1)])==0){  // if there are no examplars in one of the categories
+            r_prior[i] = 0.5;
+
+        } else {
+            // calculate similarity
+            array[2] real similarities;
+            
+            array[sum(cat_one[:(i-1)])] int tmp_idx_one = cat_one_idx[:sum(cat_one[:(i-1)])];
+            array[sum(cat_zero[:(i-1)])] int tmp_idx_two = cat_zero_idx[:sum(cat_zero[:(i-1)])];
+            
+            similarities[1] = exp(-c_prior * sum(exemplar_dist[tmp_idx_one]));
+            similarities[2] = exp(-c_prior * sum(exemplar_dist[tmp_idx_two]));
+
+            // calculate r[i]
+            rr_prior[i] = (bias*similarities[1]) / (bias*similarities[1] + (1-bias)*similarities[2]);
+
+            // to make the sampling work
+            if (rr_prior[i] == 1){
+                r_prior[i] = 0.9999;
+            } else if (rr_prior[i] == 0) {
+                r_prior[i] = 0.0001;
+            } else if (rr_prior[i] > 0 && rr_prior[i] < 1) {
+                r_prior[i] = rr_prior[i];
+            } else {
+                r_prior[i] = 0.5;
+            }
+        }
+    }
+
+    array[ntrials] int<lower=0, upper=1> priorpred = bernoulli_rng(r_prior);
+
+    // posterior pred
+    array[ntrials] int<lower=0, upper=1> posteriorpred = bernoulli_rng(r);
+    array[ntrials] int<lower=0, upper=1> posteriorcorrect;
+    for (i in 1:ntrials) {
+        if (posteriorpred[i] == cat_one[i]) {
+            posteriorcorrect[i] = 1;
+        } else {
+            posteriorcorrect[i] = 0;
+        }
+    }
+    
+    
+    // log likelihood
+   array[ntrials] real log_lik;
+
+   for (i in 1:ntrials) {
+        log_lik[i] = bernoulli_lpmf(choices[i] | r[i]);
+   }
+}
