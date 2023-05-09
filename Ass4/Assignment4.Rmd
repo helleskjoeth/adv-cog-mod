@@ -1,0 +1,396 @@
+---
+title: "Assignment 4: The Alien Game"
+author: "Astrid Nørgaard Fonager"
+date: "2023-05-02"
+output:   
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+library(pacman)
+pacman::p_load(tidyverse,
+        here,
+        posterior,
+        cmdstanr,
+        brms, tidybayes, future, purrr, furrr, prettydoc, patchwork)
+```
+
+```{r the stimuli}
+
+# Defining the stimuli, their height and position features, and their category
+stimulus <- seq(32)
+spots <- c(rep(0, 16), rep(1,16)) # 1 is arms up
+eyes <- c(rep(0, 8), rep(1, 8), rep(0, 8), rep(1, 8)) # 1 is eyes on stalk
+arms <- c(rep(c(0,0,0,0,1,1,1,1), 4)) # 1 is with spots
+legs <- c(rep(c(0,0,1,1), 8)) # 1 is thick legs
+color <- c(rep(c(0,1), 16)) # 1 green
+category <- as.factor(c(rep(0, 24), rep(1,8)))
+
+# Making this into a tibble
+stimuli <- tibble(stimulus, spots, eyes, arms, legs, color, category)
+
+# Plotting to make sure all looks right
+ggplot(stimuli, aes(spots, eyes, color = category, Label = stimulus)) +
+  geom_point (shape = 16, size = 3) +
+  #geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+  theme_bw()
+```
+
+```{r the experiment}
+# Generating the sequence of stimuli in the full experiment
+sequence <- c()
+
+for (i in 1:32) {
+  sequence <- sample(seq(32), replace = F)
+}
+
+# create an (almost) empty tibble with NAs for all the features. Only includes a column with the stimulus sequence
+experiment <- tibble(stimulus = sequence, spots = NA, eyes = NA, arms = NA, legs = NA, color = NA, category = NA)
+for (i in seq(nrow(experiment))){
+  experiment$spots[i] <- stimuli$spots[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$eyes[i] <- stimuli$eyes[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$arms[i] <- stimuli$arms[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$legs[i] <- stimuli$legs[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$color[i] <- stimuli$color[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$category[i] <- as.numeric(as.character(stimuli$category[stimuli$stimulus == experiment$stimulus[i]]))
+}
+```
+
+```{r distance}
+# Distance
+distance <- function(vect1, vect2, w){
+  return(sum(w * abs(vect1 - vect2)))
+}
+
+# Similarity
+similarity <- function(distance, c){
+  return(exp((-c) * distance))
+}
+
+# Let's assess similarity
+dd <- tibble(
+  expand_grid(
+    distance = c(0,.1,.2, .3, 4,.5,1,1.5,2,3,4,5,6),
+    c = c(0.1, 0.2, 0.5, 0.7, 1, 1.5, 2, 3, 5, 6))) %>%
+  mutate(
+    similarity = similarity(distance, c)
+  )
+
+dd %>% mutate(c = factor(c)) %>%
+  ggplot() +
+  geom_line(aes(distance, similarity, group = c, color = c)) +
+  theme_bw()
+```
+
+```{r model}
+###generative model ###
+gcm <-  function(w, c, obs, cat_one, quiet = TRUE){
+  # create an empty list to save probability of saying "1" for each trial
+  r <- c()
+  ntrials <- nrow(obs)
+  
+  for (i in 1: ntrials) {
+    # If quiet is FALSE, print every ten trials
+    if (!quiet && i %% 10 == 0){
+      print(paste("i =", i))
+    }
+    
+    # if this is the first trial, or there any category with no exemplars seen yet, set the choice to random
+    if (i == 1 || sum(cat_one[1:(i-1)]) == 0 || sum(cat_one[1:(i-1)]) == (i-1)) {
+      r <- c(r, .5)
+    } else {
+      similarities <- c()
+      # for each previously seen stimulus assess distance and similarity
+      for (e in 1:(i-1)) {
+        sim <- similarity(distance(obs[i,], obs[e, ], w), c)
+        similarities <- append(similarities, sim)
+      }
+      # Calculate prob of saying "1" by dividing similarity to 1 by the sum of similarity to 1 and to 2
+      numerator <- 0.5 * sum(similarities[cat_one[1:(i-1)] == 1])
+      denominator <- 0.5 * sum(similarities[cat_one[1:(i - 1)] == 1]) + 0.5 * sum(similarities[cat_one[1:(i - 1)] ==0])
+      r <- c(r, numerator / denominator)
+    }
+  }
+    
+  return(rbinom(ntrials, 1, r))
+}
+
+```
+
+```{r function: simulate responses}
+# function for simulation responses
+simulate_responses <- function(agent, w, c){
+
+  observations <- experiment %>%
+    select(c("spots", "eyes", "arms", "legs", "color"))
+  
+  category <- experiment$category
+  
+  if (w == "equal") {
+    weight <- rep(1 / 5, 5)
+  } else if (w == "skewed1") {
+    weight <- c(0.6, rep(0.1, 4))
+  } else if (w == "skewed2") {
+    weight <-  c(0.1, 0.6, rep(0.1,3))
+  } else if (w == "skewed3") {
+    weight <-  c(0.1, 0.1, 0.6, 0.1, 0.1)
+  } else if (w == "skewed4") {
+    weight <-  c(0.1, 0.1, 0.1, 0.6, 0.1)
+  } else if (w == "skewed5") {
+    weight <-  c(0.1, 0.1, 0.1, 0.1, 0.6)
+  }
+
+  # simulate responses
+  responses <- gcm(
+    weight,
+    c,
+    observations,
+    category
+  )
+
+  tmp_simulated_responses <- experiment %>%
+    mutate(
+      trial = seq(nrow(experiment)),
+      sim_response = responses,
+      correct = ifelse(category == sim_response, 1, 0),
+      performance = cumsum(correct) / seq_along(correct),
+      c = c,
+      w = w,
+      agent = agent
+    )
+
+  return(tmp_simulated_responses)
+}
+
+param_df <- dplyr::tibble(
+  expand_grid(
+    agent = 1:10,
+    c = seq(0.1, 3, 0.2),
+    w = c("equal", "skewed1", "skewed2", "skewed3", "skewed4", "skewed5")
+  )
+)
+
+simulated_responses <- future_pmap_dfr(param_df,
+                                       simulate_responses,
+                                       .options = furrr_options(seed = TRUE)
+)
+
+```
+
+
+```{r plot simulated responses}
+
+p3 <-  simulated_responses %>%
+  mutate(w = as.factor(w)) %>%
+  ggplot(aes(trial, performance, group = w, color = w)) +
+  geom_smooth(se = F) +
+  theme_bw() +
+  facet_wrap(c ~ .)
+
+p4 <- simulated_responses %>%
+  mutate(c = as.factor(c)) %>%
+  ggplot(aes(trial, performance, group = c, color = c)) +
+  geom_smooth(se = F) +
+  theme_bw() +
+  facet_wrap(w ~.)
+
+p3 + p4
+
+```
+
+```{r}
+## Specify where the model is
+file <- file.path("GCM.stan")
+mod_GCM <- cmdstan_model(file, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+```
+
+```{r}
+# fitting the data
+d <- simulated_responses %>% subset(
+  c == "1.1" & w == "equal"
+)
+
+gcm_data <- list(
+  ntrials = nrow(d),
+  nfeatures = 5,
+  cat_one = d$category,
+  choices = d$sim_response,
+  obs = as.matrix(d[, c("spots", "eyes", "arms", "legs", "color")]), # features
+  bias = 0.5,
+  w_prior_values = c(1, 1, 1, 1, 1),
+  c_prior_values = c(0, 1)
+)
+
+samples_gcm <- mod_GCM$sample(
+  data = gcm_data,
+  seed = 123,
+  chains = 1,
+  parallel_chains = 1,
+  threads_per_chain = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  refresh = 500
+)
+```
+
+```{r}
+# dignostics
+samples_gcm$cmdstan_diagnose()
+samples_gcm$summary()
+samples_gcm$loo()
+```
+
+## plotting ##
+
+```{r}
+# chains
+draws_gcm <- as_draws_df(samples_gcm$draws())
+
+# c
+ggplot(draws_gcm, aes(.iteration, c, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "c") +
+  theme_classic() + 
+# logit c
+ggplot(draws_gcm, aes(.iteration, logit_c, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "logit c") +
+  theme_classic()
+
+# weights
+ggplot(draws_gcm, aes(.iteration, `w[1]`, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "w1") +
+  theme_classic() +
+  ggplot(draws_gcm, aes(.iteration, `w[2]`, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "w2") +
+  theme_classic() +
+  ggplot(draws_gcm, aes(.iteration, `w[3]`, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "w3") +
+  theme_classic() +
+  ggplot(draws_gcm, aes(.iteration, `w[4]`, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "w4") +
+  theme_classic() +
+  ggplot(draws_gcm, aes(.iteration, `w[5]`, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "w5") +
+  theme_classic() 
+
+```
+
+```{r}
+ggplot(draws_gcm) +
+  geom_density(aes(c), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(c_prior), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = d$c[1]) +
+  theme_bw()
+```
+
+```{r}
+ggplot(draws_gcm) +
+  geom_density(aes(logit_c), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(logit_c_prior), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = inv_logit_scaled(d$c[1])) + ## inv logit scaled!
+  theme_bw()
+```
+
+```{r}
+ggplot(draws_gcm) +
+  geom_density(aes(`w[1]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[1]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+
+ggplot(draws_gcm) +
+  geom_density(aes(`w[2]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[2]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+
+ggplot(draws_gcm) +
+  geom_density(aes(`w[3]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[3]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+
+ggplot(draws_gcm) +
+  geom_density(aes(`w[4]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[4]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+
+ggplot(draws_gcm) +
+  geom_density(aes(`w[5]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[5]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+```
+
+```{r}
+draws_gcm %>% ggplot() +
+  geom_density(aes(`r[10]`), fill = 'lightblue') +
+  geom_density(aes(`r_prior[10]`), fill = 'pink')
+
+
+draws_gcm %>% ggplot() +
+  geom_histogram(aes(`posteriorpred[10]`), fill = 'lightblue') +
+  geom_histogram(aes(`priorpred[10]`), fill = 'pink') + 
+  geom_histogram(aes(`posteriorcorrect[10]`), fill = 'green')
+
+
+draws_gcm %>% ggplot() +
+  geom_bar(aes(`priorpred[10]`), fill = 'pink', position = 'stack') +
+  ggtitle(label = "Prior") + 
+draws_gcm %>% ggplot() +
+  geom_bar(aes(`posteriorpred[10]`), fill = 'lightblue', position = 'stack') +
+  ggtitle(label = "Posterior") +
+draws_gcm %>% ggplot() +
+  geom_bar(aes(`posteriorcorrect[10]`), fill = 'green', position = 'stack') + 
+  ggtitle(label = "Correct")
+```
+
+```{r}
+plot_preds <- function(draws, trial_no) {
+  prior_col <- paste0("`priorpred[", trial_no, "]`")
+  posterior_col <- paste0("`posteriorpred[", trial_no, "]`")
+  correct_col <- paste0("`posteriorcorrect[", trial_no, "]`")
+
+  plot <- draws %>% ggplot() +
+    geom_bar(aes_string(prior_col), fill = 'pink', position = 'stack') +
+    ggtitle(label = "Prior") + 
+    draws %>% ggplot() +
+    geom_bar(aes_string(posterior_col), fill = 'lightblue', position = 'stack') +
+    ggtitle(label = "Posterior") +
+    draws %>% ggplot() +
+    geom_bar(aes_string(correct_col), fill = 'green', position = 'stack') + 
+    ggtitle(label = "Correct")
+
+  return(plot)
+}
+
+plot_preds(draws_gcm, 10)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
