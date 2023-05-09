@@ -50,3 +50,15 @@ Your task is to:
 * do model comparison
 * report (v minimal description of research question, v minimal description of data, description of models, model quality checks, report of results)
 * [optional]: parameter/model recovery
+
+
+### ASSIGNMENT 4
+The output of the assignment should be a report briefly describing the task, briefly motivating and explaining your model, briefly showcasing the results of the simulation of the model on the task, briefly showcasing model fit on the simulated data, discussing model fit and estimates on the empirical data.
+
+You'll have to implement the structure of the experiment and simulate your model's behavior on it. Then plot how the model does (e.g. performance over trial), and comment on how well it does (bonus points if you compare it to the empirical data).
+
+You should then fit the Stan model to the simulated data. Bonus points for full parameter recovery, but for the purpose of the exercise, a simpler model quality check is sufficient.
+
+Empirical data: https://www.dropbox.com/s/vbckcxggw9ppewb/AlienData.txt?dl=0
+
+You should then visually explore the empirical data and fit the Stan model to them. Bonus points for multilevel implementations and checking all 3 sessions, but fitting the model by participant and sticking to 1 session is sufficient to pass. Do model quality checks, and comment on the results (including visualizations).
