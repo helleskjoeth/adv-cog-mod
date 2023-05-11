@@ -32,7 +32,7 @@ category <- as.factor(c(rep(0, 24), rep(1,8)))
 stimuli <- tibble(stimulus, spots, eyes, arms, legs, color, category)
 
 # Plotting to make sure all looks right
-ggplot(stimuli, aes(spots, eyes, color = category, Label = stimulus)) +
+ggplot(stimuli, aes(arms, legs, color = category, Label = stimulus)) +
   geom_point (shape = 16, size = 3) +
   #geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
   theme_bw()
@@ -48,6 +48,7 @@ for (i in 1:32) {
 
 # create an (almost) empty tibble with NAs for all the features. Only includes a column with the stimulus sequence
 experiment <- tibble(stimulus = sequence, spots = NA, eyes = NA, arms = NA, legs = NA, color = NA, category = NA)
+#put the stimuli in the right places. 
 for (i in seq(nrow(experiment))){
   experiment$spots[i] <- stimuli$spots[stimuli$stimulus == experiment$stimulus[i]]
   experiment$eyes[i] <- stimuli$eyes[stimuli$stimulus == experiment$stimulus[i]]
@@ -118,6 +119,8 @@ gcm <-  function(w, c, obs, cat_one, quiet = TRUE){
 }
 
 ```
+
+
 
 ```{r function: simulate responses}
 # function for simulation responses
@@ -200,13 +203,220 @@ p3 + p4
 
 ```
 
-```{r}
-setwd("/Users/astridnorgaardfonager/Documents/CogSci/8th semester/ACM/Assignments/A4/")
+```{r compiling stan model}
 
 ## Specify where the model is
-file <- file.path("GCM.stan")
+file <- file.path("C:/Users/helle/OneDrive - Aarhus Universitet/AU/8th semester/Adv. Cognitive Modelling/adv-cog-mod/Assignment 4/GCM.stan")
 model <- cmdstan_model(file, 
                      cpp_options = list(stan_threads = TRUE),
                      stanc_options = list("O1")) 
+```
+
+
+
+```{r}
+
+d <- simulated_responses %>% subset(
+  c == "1.1" & w == "equal"
+)
+
+gcm_data <- list(
+  ntrials = nrow(d),
+  nfeatures = 5,
+  cat_one = d$category,
+  choices = d$sim_response,
+  obs = as.matrix(d[, c("spots", "eyes", "arms", "legs", "color")]),
+  bias = 0.5,
+  w_prior_values = c(1, 1, 1, 1, 1),
+  c_prior_values = c(0, 1)
+)
+
+samples_gcm <- model$sample(
+  data = gcm_data,
+  seed = 123,
+  chains = 1,
+  parallel_chains = 1,
+  threads_per_chain = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  refresh = 500
+)
+
+
+```
+
+
+```{r diagnose}
+samples_gcm$cmdstan_diagnose()
+```
+
+```{r model summary}
+
+samples_gcm$summary()
+
+```
+
+
+```{r caterpillar plots}
+draws_df <- as_draws_df(samples_gcm$draws())
+
+ggplot(draws_df, aes(.iteration, c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+
+
+ggplot(draws_df, aes(.iteration, logit_c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+
+
+ggplot(draws_df, aes(.iteration, `w[1]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+
+
+ggplot(draws_df, aes(.iteration, `w[2]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+
+
+
+ggplot(draws_df, aes(.iteration, `w[3]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+
+
+ggplot(draws_df, aes(.iteration, `w[4]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+
+ggplot(draws_df, aes(.iteration, `w[5]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+
+```
+
+
+```{r prior post check}
+# c and c_prior
+ggplot(draws_df) +
+  geom_density(aes(c), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(c_prior), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = d$c[1]) +
+  theme_bw()
+
+# w1 and w1 prior
+ggplot(draws_df) +
+  geom_density(aes(`w[1]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[1]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+
+
+#w2
+ggplot(draws_df) +
+  geom_density(aes(`w[2]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[2]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+
+
+#w3
+ggplot(draws_df) +
+  geom_density(aes(`w[3]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[4]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+
+
+#w4
+ggplot(draws_df) +
+  geom_density(aes(`w[4]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[4]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+
+
+#w5
+ggplot(draws_df) +
+  geom_density(aes(`w[4]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[4]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()
+```
+
+```{r parameter recovery}
+pacman::p_load(future, purrr, furrr)
+plan(multisession, workers = availableCores())
+
+sim_d_and_fit <- function(agent = 1, scaling, weights) {
+  
+    
+    temp <- simulated_responses %>% subset(
+      c == scaling & w == weights & agent == agent
+      )
+    
+    data <- list(
+      ntrials = nrow(temp),
+      nfeatures = 5,
+      cat_one = temp$category,
+      choices = temp$sim_response,
+      obs = as.matrix(temp[, c("spots", "eyes", "arms", "legs", "color")]),
+      bias = 0.5,
+      w_prior_values = c(1, 1, 1, 1, 1),
+      c_prior_values = c(0, 1)
+    )
+    
+    samples_gcm <- model$sample(
+      data = data,
+      seed = 123,
+      chains = 1,
+      parallel_chains = 1,
+      threads_per_chain = 4,
+      iter_warmup = 100,
+      iter_sampling = 100,
+      refresh = 50
+    )
+    
+    draws_df <- as_draws_df(samples_gcm$draws()) 
+    temp <- tibble(trueC = scaling, trueW = weights, agent = agent,
+                   estC = draws_df$c, 
+                   estW1 = draws_df$`w[1]`,
+                   estW2 = draws_df$`w[2]`
+                   )
+    
+    return(temp)
+  
+}
+
+
+temp <- tibble(unique(simulated_responses[,c("agent", "c", "w")])) %>%
+  rename(
+    scaling = c,
+    weights = w
+  )
+
+recovery_df <- future_pmap_dfr(temp, sim_d_and_fit, .options = furrr_options(seed = TRUE))
+
+write_csv(recovery_df, "simdata/W10_GCM_recoverydf.csv")
+
+
+```
+
+
+```{r plot parameter recovery}
+p1 <- ggplot(recovery_df) +
+  geom_density(aes(estC, group = trueW, fill = trueW), alpha = 0.3) +
+  #geom_vline(xintercept = trueC) +
+  facet_wrap(. ~ trueC) +
+  theme_bw()
+
+p2 <- ggplot(recovery_df) +
+  geom_density(aes(estW1, group = trueW, fill = trueW), alpha = 0.3) +
+  #geom_vline(xintercept = trueC) +
+  facet_wrap(trueC ~ .) +
+  theme_bw()
+
+p1 / p2
 ```
 
