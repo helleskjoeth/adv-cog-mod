@@ -41,13 +41,15 @@ ggplot(stimuli, aes(spots, eyes, color = category, Label = stimulus)) +
 ```{r the experiment}
 # Generating the sequence of stimuli in the full experiment
 sequence <- c()
+stim_seq <- c()
 
-for (i in 1:32) {
+for (i in 1:3) {
   sequence <- sample(seq(32), replace = F)
+  stim_seq <- c(stim_seq, sequence)
 }
 
 # create an (almost) empty tibble with NAs for all the features. Only includes a column with the stimulus sequence
-experiment <- tibble(stimulus = sequence, spots = NA, eyes = NA, arms = NA, legs = NA, color = NA, category = NA)
+experiment <- tibble(stimulus = stim_seq, spots = NA, eyes = NA, arms = NA, legs = NA, color = NA, category = NA)
 for (i in seq(nrow(experiment))){
   experiment$spots[i] <- stimuli$spots[stimuli$stimulus == experiment$stimulus[i]]
   experiment$eyes[i] <- stimuli$eyes[stimuli$stimulus == experiment$stimulus[i]]
@@ -130,16 +132,19 @@ simulate_responses <- function(agent, w, c){
   
   if (w == "equal") {
     weight <- rep(1 / 5, 5)
-  } else if (w == "skewed1") {
-    weight <- c(0.6, rep(0.1, 4))
-  } else if (w == "skewed2") {
-    weight <-  c(0.1, 0.6, rep(0.1,3))
-  } else if (w == "skewed3") {
-    weight <-  c(0.1, 0.1, 0.6, 0.1, 0.1)
-  } else if (w == "skewed4") {
-    weight <-  c(0.1, 0.1, 0.1, 0.6, 0.1)
-  } else if (w == "skewed5") {
-    weight <-  c(0.1, 0.1, 0.1, 0.1, 0.6)
+   } 
+  #  else if (w == "skewed1") {
+  #   weight <- c(0.6, rep(0.1, 4))
+  # } else if (w == "skewed2") {
+  #   weight <-  c(0.1, 0.6, rep(0.1,3))
+  # } else if (w == "skewed3") {
+  #   weight <-  c(0.1, 0.1, 0.6, 0.1, 0.1)
+  # } else if (w == "skewed4") {
+  #   weight <-  c(0.1, 0.1, 0.1, 0.6, 0.1)
+  # } else if (w == "skewed5") {
+  #   weight <-  c(0.1, 0.1, 0.1, 0.1, 0.6)
+    else if (w == 'optimal') {
+      weight <- c(0.35, 0.35, 0.1, 0.1, 0.1)
   }
 
   # simulate responses
@@ -166,9 +171,12 @@ simulate_responses <- function(agent, w, c){
 
 param_df <- dplyr::tibble(
   expand_grid(
-    agent = 1:10,
+    #agent = 1:10,
+    agent = 1,
     c = seq(0.1, 3, 0.2),
-    w = c("equal", "skewed1", "skewed2", "skewed3", "skewed4", "skewed5")
+  #  w = c("equal", "skewed1", "skewed2", "skewed3", "skewed4", "skewed5"),
+    w = c("equal", "optimal")
+
   )
 )
 
@@ -177,6 +185,11 @@ simulated_responses <- future_pmap_dfr(param_df,
                                        .options = furrr_options(seed = TRUE)
 )
 
+```
+
+```{r}
+#write.csv(simulated_responses, "sim_res.csv")
+write.csv(simulated_responses, "sim_res_w2_a1.csv")
 ```
 
 
@@ -209,7 +222,7 @@ mod_GCM <- cmdstan_model(file,
 ```
 ```{r}
 d <- simulated_responses %>% subset(
-  c == "1.1" & w == "equal"
+  c == "1.1" & w == "equal" & agent == '1' # try c == 0.5 ? 
 )
 
 gcm_data <- list(
@@ -218,7 +231,7 @@ gcm_data <- list(
   cat_one = d$category,
   choices = d$sim_response,
   obs = as.matrix(d[, c("spots", "eyes", "arms", "legs", "color")]), # features
-  bias = 0.5,
+  #bias = 0.5,
   w_prior_values = c(1, 1, 1, 1, 1),
   c_prior_values = c(0, 1)
 )
@@ -229,8 +242,8 @@ samples_gcm <- mod_GCM$sample(
   chains = 1,
   parallel_chains = 1,
   threads_per_chain = 4,
-  iter_warmup = 1000,
-  iter_sampling = 1000,
+  iter_warmup = 1500,
+  iter_sampling = 3000,
   refresh = 500
 )
 ```
@@ -244,6 +257,7 @@ samples_gcm$loo()
 ```{r}
 # chains
 draws_gcm <- as_draws_df(samples_gcm$draws())
+#write.csv(draws_gcm, "draws_gcm_w_equal_c_1.1.csv")
 
 # c
 ggplot(draws_gcm, aes(.iteration, c, group = .chain, color=.chain)) + 
@@ -332,8 +346,8 @@ ggplot(draws_gcm) +
 # prior and post estimates of parameters
 ```{r}
 draws_gcm %>% ggplot() +
-  geom_density(aes(`r[10]`), fill = 'lightblue') +
-  geom_density(aes(`r_prior[10]`), fill = 'pink')
+  geom_density(aes(`r[11]`), fill = 'lightblue') +
+  geom_density(aes(`r_prior[11]`), fill = 'pink')
 ```
 # prior and post preds
 
@@ -359,7 +373,7 @@ return(plot)
 ```
 
 ```{r}
-plot_preds(draws_gcm, 7)
+plot_preds(draws_gcm, 11)
 ```
 
 

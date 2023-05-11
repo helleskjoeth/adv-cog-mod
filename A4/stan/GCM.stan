@@ -4,7 +4,7 @@ data {
   array[ntrials] int<lower=0, upper=1> cat_one; // true responses on a trial by trial basis
   array[ntrials] int<lower=0, upper=1> choices; // decisions on a trial by trial basis
   array[ntrials, nfeatures] real obs; // stimuli as vectors of features
-  real<lower=0, upper=1> bias; // initial bias for category one over two
+  //real<lower=0, upper=1> bias; // initial bias for category one over two
   
   // priors
   vector [nfeatures] w_prior_values; // concentration parameters for dirichlet distribution <Lower=1>
@@ -68,8 +68,9 @@ transformed parameters {
       similarities[2] = sum(exemplar_sim[tmp_idx_zero]);
 
      // calculate r[i]
-     rr[i] = (bias*similarities[1]) / (bias*similarities[1] + (1-bias)*similarities[2]);
-    
+     //rr[i] = (bias*similarities[1]) / (bias*similarities[1] + (1-bias)*similarities[2]);
+      rr[i] = (similarities[1]) / (similarities[1] + similarities[2]);
+
      // to make the sampling work
      if (rr[i] > 0.9999){
         r[i] = 0.9999;
@@ -124,12 +125,13 @@ generated quantities {
             array[2] real similarities;
             
             array[sum(cat_one[:(i-1)])] int tmp_idx_one = cat_one_idx[:sum(cat_one[:(i-1)])];
-            array[sum(cat_zero[:(i-1)])] int tmp_idx_two = cat_zero_idx[:sum(cat_zero[:(i-1)])];
+            array[sum(cat_zero[:(i-1)])] int tmp_idx_zero = cat_zero_idx[:sum(cat_zero[:(i-1)])];
             similarities[1] = exp(-c_prior * sum(exemplar_dist[tmp_idx_one]));
-            similarities[2] = exp(-c_prior * sum(exemplar_dist[tmp_idx_two]));
+            similarities[2] = exp(-c_prior * sum(exemplar_dist[tmp_idx_zero]));
 
             // calculate r[i]
-            rr_prior[i] = (bias*similarities[1]) / (bias*similarities[1] + (1-bias)*similarities[2]);
+            //rr_prior[i] = (bias*similarities[1]) / (bias*similarities[1] + (1-bias)*similarities[2]);
+            rr_prior[i] = (similarities[1]) / (similarities[1] + similarities[2]);
 
             // to make the sampling work
             if (rr_prior[i] == 1){
