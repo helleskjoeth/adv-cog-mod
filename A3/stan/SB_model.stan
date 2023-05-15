@@ -17,7 +17,18 @@ transformed data {
   other_logit = logit(other); // log odds
   //rating2_logit = logit(rating2); // log odds
   rating2_logit = logit(rating2/9);
-
+  // vector[trials] rating2_temp;
+  // 
+  // for (t in 1:trials){
+  //   rating2_temp[t] = rating2[t]/9;
+  //   if (rating2_temp[t] > 8){
+  //     rating2_temp[t] = 8;
+  //   } 
+  //   if (rating2_temp[t] < 1){
+  //     rating2_temp[t] = 1;
+  //   }
+  //   rating2_logit[t] = logit(rating2_temp[t]);
+  // }
 }
 
 parameters {

@@ -216,6 +216,203 @@ ggplot(draws_SB) +
   labs(title = "Prior and posterior distribution of SD")
 ```
 
+```{r}
+# count number of predictions which are more than 8 or less than 1
+
+# trial no 1
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
+  count(predictions > 8) # 2 out of 6000
+
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
+  count(predictions < 1) # 2 out of 6000
+
+# trial no 2
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[2]`)*9, 0)) %>% 
+  count(predictions > 8) # 0 out of 6000 
+
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[2]`)*9, 0)) %>% 
+  count(predictions < 1) # 148 out of 6000
+
+# trial no 10
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[10]`)*9, 0)) %>% 
+  count(predictions > 8) # 56 out of 6000 
+
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[10]`)*9, 0)) %>% 
+  count(predictions < 1) # 0 out of 6000
+
+# trial no 57
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[57]`)*9, 0)) %>% 
+  count(predictions > 8) # 5 out of 6000 
+
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[57]`)*9, 0)) %>% 
+  count(predictions < 1) # 0 out of 6000
+```
+
+
+```{r}
+# for loop to count how many times different post preds were out of bounds ( > 8 | < 1)
+greater = tibble()
+lesser = tibble()
+greater_no = tibble()
+lesser_no = tibble()
+
+for(i in 1:70){ # 70 trials = 70 post pred columns 
+  col_no = i # post preds column number
+  post_no = paste0("post_preds[", col_no, "]") # paste number into column name
+  
+  # get predictions which are greater than 8
+  tmp2 = tibble() #placeholder
+  tmp = draws_SB %>% 
+    mutate(
+    predictions = round(inv_logit_scaled(!!as.name(post_no))*9, 0)) %>% 
+    count(predictions > 8) 
+  
+  # counting number of times predictions were greater than 8 and binding it to a df
+  if(any(tmp == T)){
+    tmp2 = rbind(tmp2, tmp)
+    tmp2 = tmp2 %>% slice(2)
+    greater = rbind(greater, tmp2)
+    greater_no = rbind(greater_no, post_no)
+  }
+  
+  
+  # get predictions which are less than 1 
+  tmp3 <- tibble() # placeholder
+  tmp = draws_SB %>% 
+    mutate(
+    predictions = round(inv_logit_scaled(!!as.name(post_no))*9, 0)) %>%
+    count(predictions < 1) 
+  
+  # counting number of times predictions were less than 1 and binding it to a df
+  if(any(tmp == T)){
+    tmp3 = rbind(tmp3, tmp)
+    tmp3 = tmp3 %>% slice(2) 
+    lesser = rbind(lesser, tmp3)
+    lesser_no = rbind(lesser_no, post_no)
+  }
+}
+
+# fixing column names
+greater_no <- greater_no %>% 
+  rename("pred_no" = "X.post_preds.1..")
+
+lesser_no <- lesser_no %>% 
+  rename("pred_no" = "X.post_preds.1..")
+
+# cbinding the name of the post preds and how many times they were out of bounds
+greater <- cbind(greater_no, greater)
+lesser <- cbind(lesser_no, lesser)
+
+```
+
+
+```{r}
+# getting the details of the posterior predictions
+
+# max no of predictions out of bounds for one trial
+max(greater$n) # 609
+609/6000 # ~ 10%
+
+max(lesser$n) # 339
+339/6000 # ~ 6%
+
+```
+
+
+```{r}
+# create "greater" function
+
+greater_f <- function(draws){
+  greater = tibble() 
+  greater_no = tibble()
+  
+  for (i in 1:70){
+  col_no = i
+  post_no = paste0("post_preds[", col_no, "]") # paste number into column name
+  
+  # get predictions which are greater than 8
+  tmp2 = tibble() #placeholder
+  tmp = draws %>% 
+    mutate(
+    predictions = round(inv_logit_scaled(!!as.name(post_no))*9, 0)) %>% 
+    count(predictions > 8) 
+  
+  # counting number of times predictions were greater than 8 and binding it to a df
+  if(any(tmp == T)){
+    tmp2 = rbind(tmp2, tmp)
+    tmp2 = tmp2 %>% slice(2)
+    greater = rbind(greater, tmp2)
+    greater_no = rbind(greater_no, post_no)
+  }
+}
+  # fixing column names
+ greater_no <- greater_no %>%
+ rename("pred_no" = "X.post_preds.1..")
+  
+  # cbinding the name of the post preds and how many times they were out of bounds
+  greater <- cbind(greater_no, greater)
+  
+  return(greater)
+}
+
+test <- greater_f(draws_SB)
+
+
+#df_text <- map_dfr(1:1546, get_text)
+
+for(i in 1:10){
+  test <- greater_f(draws_SB, i)
+} # overwrites data
+
+test <- map_dfr(1:70, greater_f)
+
+
+col_no = 1
+# for loop to count how many times different post preds were out of bounds ( > 8 | < 1)
+
+lesser = tibble()
+
+lesser_no = tibble()
+
+for(i in 1:70){ # 70 trials = 70 post pred columns 
+  col_no = i # post preds column number
+  
+  
+  # get predictions which are less than 1 
+  tmp3 <- tibble() # placeholder
+  tmp = draws_SB %>% 
+    mutate(
+    predictions = round(inv_logit_scaled(!!as.name(post_no))*9, 0)) %>%
+    count(predictions < 1) 
+  
+  # counting number of times predictions were less than 1 and binding it to a df
+  if(any(tmp == T)){
+    tmp3 = rbind(tmp3, tmp)
+    tmp3 = tmp3 %>% slice(2) 
+    lesser = rbind(lesser, tmp3)
+    lesser_no = rbind(lesser_no, post_no)
+  }
+}
+
+
+lesser_no <- lesser_no %>% 
+  rename("pred_no" = "X.post_preds.1..")
+
+# cbinding the name of the post preds and how many times they were out of bounds
+greater <- cbind(greater_no, greater)
+lesser <- cbind(lesser_no, lesser)
+
+```
+
+
 ```{r plot fit to SB}
 # code requires running fit_model with clean = T
 # p1 <- cogsci_data %>% 
@@ -223,7 +420,9 @@ ggplot(draws_SB) +
 
 # check participant 1, trial 1 - GOOD FIT
 draws_SB %>% mutate(
-  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) # easy but illegal fix?
+  ) %>% 
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#36802d") + 
@@ -236,7 +435,9 @@ draws_SB %>% mutate(
 
 # check participant 1, trial 2 - WORSE FIT
 draws_SB %>% mutate(
-  predictions = round(inv_logit_scaled(`post_preds[2]`)*9, 0)) %>% 
+  predictions = round(inv_logit_scaled(`post_preds[2]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) # easy but illegal fix?
+  ) %>% 
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#36802d") + 
@@ -249,7 +450,9 @@ draws_SB %>% mutate(
 
 # check participant 1, trial 10
 draws_SB %>% mutate(
-  predictions = round(inv_logit_scaled(`post_preds[10]`)*9, 0)) %>% 
+  predictions = round(inv_logit_scaled(`post_preds[10]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) # easy but illegal fix?
+  ) %>% 
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#36802d") + 
@@ -257,7 +460,7 @@ draws_SB %>% mutate(
                 color = "red", size= 1) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
   theme_bw()+ 
-  labs(title = "Simple Bayes fit to participant 1, trial 10, faceID 19")
+  labs(title = "Simple Bayes fit to participant 1, trial 10, faceID 19") # goes up to 9
 
 ```
 
