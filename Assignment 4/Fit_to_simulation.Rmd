@@ -1,0 +1,526 @@
+---
+title: "Assignment 4: The Alien Game"
+author: "Astrid Nørgaard Fonager"
+date: "2023-05-02"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+library(pacman)
+pacman::p_load(tidyverse,
+        here,
+        posterior,
+        cmdstanr,
+        brms, tidybayes, future, purrr, furrr, prettydoc, patchwork, stringr, ggpubr)
+```
+
+
+```{r}
+
+## Specify where the model is
+file <- file.path("GCM.stan")
+model <- cmdstan_model(file, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+```
+
+```{r function: plot_preds}
+plot_preds <- function(draws, no){
+
+  prior = paste0("`priorpred[",no,"]`")
+  post = paste0("`posteriorpred[",no, "]`")
+  cor = paste0("`posteriorcorrect[", no, "]`")
+
+  plot = draws %>% ggplot() +
+    geom_bar(aes_string(prior), fill = 'pink', position = 'stack') +
+    ggtitle(label = "Prior") + 
+  draws %>% ggplot() +
+    geom_bar(aes_string(post), fill = 'lightblue', position = 'stack') +
+    ggtitle(label = "Posterior") +
+  draws %>% ggplot() +
+    geom_bar(aes_string(cor), fill = 'lightgreen', position = 'stack') +
+    ggtitle(label = "Correct")
+    
+return(plot)
+}
+
+```
+
+
+# MODEL: c == "1.1" & w == "equal"
+
+```{r fit model: c == "1.1" & w == "equal"}
+d <- simulated_responses %>% subset(
+  c == "1.1" & w == "equal"
+)
+
+gcm_data <- list(
+  ntrials = nrow(d),
+  nfeatures = 5,
+  cat_one = d$category,
+  choices = d$sim_response,
+  obs = as.matrix(d[, c("spots", "eyes", "legs", "arms", "color")]),
+  bias = 0.5,
+  w_prior_values = c(1, 1, 1, 1, 1),
+  c_prior_values = c(0, 1) # prior values for logit_c
+)
+
+start_time <- Sys.time()
+
+samples_equal <- model$sample(
+  data = gcm_data,
+  seed = 123,
+  chains = 1,
+  parallel_chains = 1,
+  threads_per_chain = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  refresh = 500
+)
+
+end_time <- Sys.time()
+time_equal <- end_time - start_time
+print(time_equal)
+# Time difference of 
+
+```
+
+## check sampling 
+```{r check model: c == "1.1" & w == "equal"}
+samples_equal$cmdstan_diagnose() # no problems detected
+samples_equal$summary()
+
+```
+
+```{r trace plots: c == "1.1" & w == "equal"}
+# plot chains
+draws_equal <- as_draws_df(samples_equal$draws())
+
+## c
+ggplot(draws_equal, aes(.iteration, c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+  labs(title = "Trace plot: c [equal]") 
+
+## logit_c
+ggplot(draws_equal, aes(.iteration, logit_c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: logit_c [equal]") 
+
+## weight[1]
+ggplot(draws_equal, aes(.iteration, `w[1]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[1] [equal]") 
+
+# weight[2]
+ggplot(draws_equal, aes(.iteration, `w[2]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[2] [equal]") 
+
+# weight[3]
+ggplot(draws_equal, aes(.iteration, `w[3]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[3] [equal]") 
+
+# weight[4]
+ggplot(draws_equal, aes(.iteration, `w[4]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[4] [equal]")
+
+# weight[5]
+ggplot(draws_equal, aes(.iteration, `w[5]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[5] [equal]")
+
+```
+
+## prior/posterior update checks
+```{r pp update checks: c == "1.1" & w == "equal"}
+# c
+ggplot(draws_equal) +
+  geom_density(aes(c), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(c_prior), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = d$c[1]) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: c") +
+
+  # logit_c
+ggplot(draws_equal) +
+  geom_density(aes(logit_c), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(logit_c_prior), alpha = 0.6, fill = "pink") +
+  theme_bw()+
+  labs(title = "Prior/posterior update: logit_c")
+
+# weight 1
+ggplot(draws_equal) +
+  geom_density(aes(`w[1]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[1]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw()+
+  labs(title = "Prior/posterior update: weight 1")
+
+# weight 2
+ggplot(draws_equal) +
+  geom_density(aes(`w[2]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[2]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 2")
+
+# weight 3
+ggplot(draws_equal) +
+  geom_density(aes(`w[3]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[3]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 3")
+
+# weight 4
+ggplot(draws_equal) +
+  geom_density(aes(`w[4]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[4]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 4")
+
+# weight 5
+ggplot(draws_equal) +
+  geom_density(aes(`w[5]`), alpha = 0.6, fill = "lightblue") +
+  geom_density(aes(`w_prior[5]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.2) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 5")
+
+```
+
+## plot posterior predictions
+```{r}
+plot_preds(draws_equal, 20)
+```
+
+
+# MODEL: c == "2.3" & w == "skewed1"
+
+```{r fit model:  c == "2.3" & w == "skewed1"}
+d <- simulated_responses %>% subset(
+  c == "2.3" & w == "skewed1"
+)
+
+gcm_data <- list(
+  ntrials = nrow(d),
+  nfeatures = 5,
+  cat_one = d$category,
+  choices = d$sim_response,
+  obs = as.matrix(d[, c("spots", "eyes", "legs", "arms", "color")]),
+  bias = 0.5,
+  w_prior_values = c(1, 1, 1, 1, 1),
+  c_prior_values = c(0, 1) # prior values for logit_c
+)
+
+start_time <- Sys.time()
+
+samples_skewed1 <- model$sample(
+  data = gcm_data,
+  seed = 123,
+  chains = 1,
+  parallel_chains = 1,
+  threads_per_chain = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  refresh = 500
+)
+ 
+end_time <- Sys.time()
+time_skewed1 <- end_time - start_time
+# Time difference of 2.5 hours
+
+```
+
+## check sampling 
+```{r check model: c == "2.3" & w == "skewed1"}
+samples_skewed1$cmdstan_diagnose() # no problems detected
+samples_skewed1$summary()
+
+```
+
+```{r trace plots: c == "2.3" & w == "skewed1"}
+# plot chains
+draws_skewed1 <- as_draws_df(samples_skewed1$draws())
+
+## c
+ggplot(draws_skewed1, aes(.iteration, c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+  labs(title = "Trace plot: c [skewed1]") 
+
+## logit_c
+ggplot(draws_skewed1, aes(.iteration, logit_c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: logit_c [skewed1]") 
+
+## weight[1]
+ggplot(draws_skewed1, aes(.iteration, `w[1]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[1] [skewed1]") 
+
+# weight[2]
+ggplot(draws_skewed1, aes(.iteration, `w[2]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[2] [skewed1]") 
+
+# weight[3]
+ggplot(draws_skewed1, aes(.iteration, `w[3]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[3] [skewed1]") 
+
+# weight[4]
+ggplot(draws_skewed1, aes(.iteration, `w[4]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[4] [skewed1]")
+
+# weight[5]
+ggplot(draws_skewed1, aes(.iteration, `w[5]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[5] [skewed1]")
+
+```
+
+## prior/posterior update checks
+```{r pp update checks: c == "2.3" & w == "skewed1"}
+# c
+ggplot(draws_skewed1) +
+  geom_density(aes(c), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(c_prior), alpha = 0.6, fill = "purple") +
+  geom_vline(xintercept = d$c[1]) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: c [skewed1]") +
+
+  # logit_c
+ggplot(draws_skewed1) +
+  geom_density(aes(logit_c), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(logit_c_prior), alpha = 0.6, fill = "purple") +
+  theme_bw()+
+  labs(title = "Prior/posterior update: logit_c [skewed1]")
+
+# weight 1
+ggplot(draws_skewed1) +
+  geom_density(aes(`w[1]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[1]`), alpha = 0.6, fill = "purple") +
+  geom_vline(xintercept = 0.6) +
+  theme_bw()+
+  labs(title = "Prior/posterior update: weight 1 [skewed1]")
+
+# weight 2
+ggplot(draws_skewed1) +
+  geom_density(aes(`w[2]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[2]`), alpha = 0.6, fill = "purple") +
+  geom_vline(xintercept = 0.1) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 2 [skewed1]")
+
+# weight 3
+ggplot(draws_skewed1) +
+  geom_density(aes(`w[3]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[3]`), alpha = 0.6, fill = "purple") +
+  geom_vline(xintercept = 0.1) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 3 [skewed1]")
+
+# weight 4
+ggplot(draws_skewed1) +
+  geom_density(aes(`w[4]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[4]`), alpha = 0.6, fill = "purple") +
+  geom_vline(xintercept = 0.1) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 4 [skewed1]")
+
+# weight 5
+ggplot(draws_skewed1) +
+  geom_density(aes(`w[5]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[5]`), alpha = 0.6, fill = "purple") +
+  geom_vline(xintercept = 0.1) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 5 [skewed1]")
+
+```
+
+## plot posterior predictions
+```{r}
+plot_preds(draws_skewed1, 20)
+```
+
+
+
+
+# MODEL: c == "2.9" & w == "skewed2"
+
+```{r fit model:  c == "2.9" & w == "skewed2"}
+d <- simulated_responses %>% subset(
+  c == "2.9" & w == "skewed2"
+)
+
+gcm_data <- list(
+  ntrials = nrow(d),
+  nfeatures = 5,
+  cat_one = d$category,
+  choices = d$sim_response,
+  obs = as.matrix(d[, c("spots", "eyes", "legs", "arms", "color")]),
+  bias = 0.5,
+  w_prior_values = c(1, 1, 1, 1, 1),
+  c_prior_values = c(0, 1) # prior values for logit_c
+)
+
+
+start_time <- sys.time()
+
+samples_skewed2 <- model$sample(
+  data = gcm_data,
+  seed = 123,
+  chains = 1,
+  parallel_chains = 1,
+  threads_per_chain = 4,
+  iter_warmup = 1000,
+  iter_sampling = 2000,
+  refresh = 500
+)
+ 
+end_time <- sys.time()
+time_skewed2 <- end_time - start_time
+# Time difference of 3.5 hours
+
+```
+
+## check sampling 
+```{r check model: c == "2.9" & w == "skewed2"}
+samples_skewed2$cmdstan_diagnose() # no problems detected
+samples_skewed2$summary()
+
+```
+
+```{r trace plots: c == "2.9" & w == "skewed2"}
+# plot chains
+draws_skewed2 <- as_draws_df(samples_skewed2$draws())
+
+## c
+ggplot(draws_skewed2, aes(.iteration, c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+  labs(title = "Trace plot: c [skewed2]") 
+
+## logit_c
+ggplot(draws_skewed2, aes(.iteration, logit_c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: logit_c [skewed2]") 
+
+## weight[1]
+ggplot(draws_skewed2, aes(.iteration, `w[1]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[1] [skewed2]") 
+
+# weight[2]
+ggplot(draws_skewed2, aes(.iteration, `w[2]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[2] [skewed2]") 
+
+# weight[3]
+ggplot(draws_skewed2, aes(.iteration, `w[3]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[3] [skewed2]") 
+
+# weight[4]
+ggplot(draws_skewed2, aes(.iteration, `w[4]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[4] [skewed2]")
+
+# weight[5]
+ggplot(draws_skewed2, aes(.iteration, `w[5]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[5] [skewed2]")
+
+```
+
+## prior/posterior update checks
+```{r pp update checks: c == "2.9" & w == "skewed2"}
+# c
+ggplot(draws_skewed2) +
+  geom_density(aes(c), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(c_prior), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = d$c[1]) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: c [skewed2]") +
+
+  # logit_c
+ggplot(draws_skewed2) +
+  geom_density(aes(logit_c), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(logit_c_prior), alpha = 0.6, fill = "pink") +
+  theme_bw()+
+  labs(title = "Prior/posterior update: logit_c [skewed2]")
+
+# weight 1
+ggplot(draws_skewed2) +
+  geom_density(aes(`w[1]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[1]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.1) +
+  theme_bw()+
+  labs(title = "Prior/posterior update: weight 1 [skewed2]")
+
+# weight 2
+ggplot(draws_skewed2) +
+  geom_density(aes(`w[2]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[2]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.6) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 2 [skewed2]")
+
+# weight 3
+ggplot(draws_skewed2) +
+  geom_density(aes(`w[3]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[3]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.1) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 3 [skewed2]")
+
+# weight 4
+ggplot(draws_skewed2) +
+  geom_density(aes(`w[4]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[4]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.1) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 4 [skewed2]")
+
+# weight 5
+ggplot(draws_skewed2) +
+  geom_density(aes(`w[5]`), alpha = 0.6, fill = "lightgreen") +
+  geom_density(aes(`w_prior[5]`), alpha = 0.6, fill = "pink") +
+  geom_vline(xintercept = 0.1) +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 5 [skewed2]")
+
+```
+
+## plot posterior predictions
+```{r}
+plot_preds(draws_skewed2, 20)
+```
+
+
+
+
