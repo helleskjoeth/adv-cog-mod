@@ -1,0 +1,430 @@
+---
+title: "Fit_to_empirical"
+author: "Astrid Nørgaard Fonager"
+date: "2023-05-16"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r setup, include=FALSE}
+library(pacman)
+pacman::p_load(tidyverse,
+        here,
+        posterior,
+        cmdstanr,
+        brms, tidybayes, future, purrr, furrr, prettydoc, patchwork, stringr, ggpubr)
+```
+
+```{r load model}
+## Specify where the model is
+file <- file.path("GCM.stan")
+model <- cmdstan_model(file, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+```
+
+# FIT MODEL TO EMPIRICAL DATA
+
+## get data
+
+```{r load and prepare data}
+# load data
+empirical_data <- read.delim("data/AlienData.txt", header = TRUE, sep = ",") %>% 
+  filter(condition == 2, # individual condition
+         session == 1  # relevant session (spots and eyes on stalk = danger)
+         ) %>% 
+  mutate_at("stimulus", str_replace, ".jpg", "") # remove .jpg from stimulus col
+
+# make stimulus columns
+empirical_data$stimulus <- strsplit(empirical_data$stimulus, split = "")
+empirical_data <- empirical_data %>% 
+  separate(stimulus, c("c","spots", "eyes", "legs", "arms", "color")) %>% 
+  dplyr::select(-c("c", "test", "condition", "session", "motivation", "competence", "communication", "complement")) %>% # remove unnecesaary columns
+  mutate_at(c("spots", "eyes", "legs", "arms", "color"), as.integer)
+
+# Simplify choices to focus on danger
+empirical_data$choices_simple <- ifelse(empirical_data$response == 1 | empirical_data$response == 2, 0, 1)
+
+# calculate performance
+empirical_data <- empirical_data %>% 
+  group_by(subject) %>% 
+  mutate(
+    performance = cumsum(correct) / seq_along(correct))
+
+```
+
+```{r save clean data}
+write.csv(empirical_data, "data/cleaned_data.csv")
+
+```
+
+
+## explore data
+
+```{r load empirical data}
+
+empirical_data <- read.csv("cleaned_data.csv")
+
+```
+
+```{r plot performance}
+
+ep1 <- empirical_data %>%
+  mutate(subject = as.factor(subject)) %>% 
+  ggplot(aes(trial, cumulative, group = subject, color = subject)) +
+  geom_smooth(se = F) +
+  labs(y = "cumulative performance score") +
+  theme_bw()
+
+ep2 <- empirical_data %>%
+  mutate(subject = as.factor(subject)) %>% 
+  ggplot(aes(trial, performance, group = subject, color = subject)) +
+  geom_smooth(se = F) +
+  theme_bw()
+
+ggarrange(ep1, ep2, ncol=2, nrow=1, common.legend = TRUE, legend="right")
+
+```
+
+
+## fit model
+
+```{r function: prepare data}
+
+prep_data <- function(data, id){
+  df <- data %>% 
+    filter(subject == id)
+  
+  data <- list(
+      ntrials = nrow(df),
+      nfeatures = 5,
+      cat_one = df$dangerous,
+      choices = df$choices_simple,
+      obs = as.matrix(df[, c("spots", "eyes", "legs", "arms", "color")]),
+      bias = 0.5,
+      w_prior_values = c(1, 1, 1, 1, 1),
+      c_prior_values = c(0, 1) # prior values for logit_c
+    )
+  
+  return(data)
+}
+
+```
+
+
+```{r select participants}
+
+# best participant
+empirical_data %>% group_by(subject) %>% 
+  filter(trial == 104) %>% 
+  max(cumulative) # subject 4 performs best
+
+best_data <- prep_data(empirical_data, id = 4)
+
+# worst participant
+empirical_data %>% group_by(subject) %>% 
+  filter(trial == 104) %>% 
+  min(cumulative) # subject 2 performs worst
+
+worst_data <- prep_data(empirical_data, id = 2)
+```
+
+
+```{r fit model to data}
+# fit best participant
+samples_best <- model$sample(
+  data = best_data,
+  seed = 123,
+  chains = 1,
+  parallel_chains = 1,
+  threads_per_chain = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  refresh = 500
+)
+
+# fit worst participant
+samples_worst <- model$sample(
+  data = worst_data,
+  seed = 123,
+  chains = 1,
+  parallel_chains = 1,
+  threads_per_chain = 4,
+  iter_warmup = 1000,
+  iter_sampling = 1000,
+  refresh = 500
+)
+
+```
+
+## check sampling
+
+```{r check sampling}
+# best
+samples_best$cmdstan_diagnose() # no problems detected
+samples_best$summary()
+
+# worst
+samples_worst$cmdstan_diagnose() # no problems detected
+samples_worst$summary()
+```
+
+
+```{r trace plots: best}
+# plot chains
+draws_best <- as_draws_df(samples_best$draws())
+
+## c
+ggplot(draws_best, aes(.iteration, c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic()
+  labs(title = "Trace plot: c [best participant]") +
+
+## logit_c
+ggplot(draws_best, aes(.iteration, logit_c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: logit_c [best participant]") 
+
+## weight[1]
+ggplot(draws_best, aes(.iteration, `w[1]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[1] [best participant]") +
+
+# weight[2]
+ggplot(draws_best, aes(.iteration, `w[2]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[2] [best participant]") 
+
+# weight[3]
+ggplot(draws_best, aes(.iteration, `w[3]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[3] [best participant]") +
+
+# weight[4]
+ggplot(draws_best, aes(.iteration, `w[4]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[4] [best participant]")
+
+# weight[5]
+ggplot(draws_best, aes(.iteration, `w[5]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[5] [best participant]")
+
+```
+
+```{r trace plots: worst}
+# plot chains
+draws_worst <- as_draws_df(samples_worst$draws())
+
+## c
+ggplot(draws_worst, aes(.iteration, c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: c [worst participant]") +
+
+## logit_c
+ggplot(draws_worst, aes(.iteration, logit_c, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: logit_c [worst participant]") 
+
+## weight[1]
+ggplot(draws_worst, aes(.iteration, `w[1]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[1] [worst participant]") +
+
+# weight[2]
+ggplot(draws_worst, aes(.iteration, `w[2]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[2] [worst participant]") 
+
+# weight[3]
+ggplot(draws_worst, aes(.iteration, `w[3]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[3] [worst participant]") +
+
+# weight[4]
+ggplot(draws_worst, aes(.iteration, `w[4]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[4] [worst participant]")
+
+# weight[5]
+ggplot(draws_worst, aes(.iteration, `w[5]`, group = .chain, color = .chain)) +
+  geom_line(alpha = 0.5) +
+  theme_classic() +
+  labs(title = "Trace plot: weight[5] [worst participant]")
+
+```
+
+
+## Prior/posterior update checks
+
+```{r pp update checks: best participant}
+# c
+ggplot(draws_best) +
+  geom_density(aes(c), alpha = 0.6, fill = "darkgreen") +
+  geom_density(aes(c_prior), alpha = 0.6, fill = "lightgreen") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: c [best participant]") +
+
+  # logit_c
+ggplot(draws_best) +
+  geom_density(aes(logit_c), alpha = 0.6, fill = "darkgreen") +
+  geom_density(aes(logit_c_prior), alpha = 0.6, fill = "lightgreen") +
+  theme_bw()+
+  labs(title = "Prior/posterior update: logit_c [best participant]")
+
+# weight 1
+ggplot(draws_best) +
+  geom_density(aes(`w[1]`), alpha = 0.6, fill = "darkgreen") +
+  geom_density(aes(`w_prior[1]`), alpha = 0.6, fill = "lightgreen") +
+  theme_bw()+
+  labs(title = "Prior/posterior update: weight 1 [best participant]") +
+
+# weight 2
+ggplot(draws_best) +
+  geom_density(aes(`w[2]`), alpha = 0.6, fill = "darkgreen") +
+  geom_density(aes(`w_prior[2]`), alpha = 0.6, fill = "lightgreen") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 2 [best participant]")
+
+# weight 3
+ggplot(draws_best) +
+  geom_density(aes(`w[3]`), alpha = 0.6, fill = "darkgreen") +
+  geom_density(aes(`w_prior[3]`), alpha = 0.6, fill = "lightgreen") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 3 [best participant]") +
+
+# weight 4
+ggplot(draws_best) +
+  geom_density(aes(`w[4]`), alpha = 0.6, fill = "darkgreen") +
+  geom_density(aes(`w_prior[4]`), alpha = 0.6, fill = "lightgreen") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 4 [best participant]") 
+
+# weight 5
+ggplot(draws_best) +
+  geom_density(aes(`w[5]`), alpha = 0.6, fill = "darkgreen") +
+  geom_density(aes(`w_prior[5]`), alpha = 0.6, fill = "lightgreen") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 5 [best participant]")
+
+```
+
+
+```{r pp update checks: worst participant}
+# c
+ggplot(draws_worst) +
+  geom_density(aes(c), alpha = 0.6, fill = "red") +
+  geom_density(aes(c_prior), alpha = 0.6, fill = "pink") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: c [worst participant]") +
+
+  # logit_c
+ggplot(draws_worst) +
+  geom_density(aes(logit_c), alpha = 0.6, fill = "red") +
+  geom_density(aes(logit_c_prior), alpha = 0.6, fill = "pink") +
+  theme_bw()+
+  labs(title = "Prior/posterior update: logit_c [worst participant]")
+
+# weight 1
+ggplot(draws_worst) +
+  geom_density(aes(`w[1]`), alpha = 0.6, fill = "red") +
+  geom_density(aes(`w_prior[1]`), alpha = 0.6, fill = "pink") +
+  theme_bw()+
+  labs(title = "Prior/posterior update: weight 1 [worst participant]") +
+
+# weight 2
+ggplot(draws_worst) +
+  geom_density(aes(`w[2]`), alpha = 0.6, fill = "red") +
+  geom_density(aes(`w_prior[2]`), alpha = 0.6, fill = "pink") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 2 [worst participant]")
+
+# weight 3
+ggplot(draws_worst) +
+  geom_density(aes(`w[3]`), alpha = 0.6, fill = "red") +
+  geom_density(aes(`w_prior[3]`), alpha = 0.6, fill = "pink") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 3 [worst participant]") +
+
+# weight 4
+ggplot(draws_worst) +
+  geom_density(aes(`w[4]`), alpha = 0.6, fill = "red") +
+  geom_density(aes(`w_prior[4]`), alpha = 0.6, fill = "pink") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 4 [worst participant]")
+
+# weight 5
+ggplot(draws_worst) +
+  geom_density(aes(`w[5]`), alpha = 0.6, fill = "red") +
+  geom_density(aes(`w_prior[5]`), alpha = 0.6, fill = "pink") +
+  theme_bw() +
+  labs(title = "Prior/posterior update: weight 5 [worst participant]")
+
+```
+
+
+```{r joint posteriors}
+joint_data <- tibble(best_w1 = draws_best$`w[1]`,
+                     worst_w1 = draws_worst$`w[1]`, 
+                     best_w2 = draws_best$`w[2]`, 
+                     worst_w2 = draws_worst$`w[2]`,
+                     best_w3 = draws_best$`w[3]`,
+                     worst_w3 = draws_worst$`w[3]`, 
+                     best_w4 = draws_best$`w[4]`, 
+                     worst_w4 = draws_worst$`w[4]`,
+                     best_w5 = draws_best$`w[5]`, 
+                     worst_w5 = draws_worst$`w[5]`, 
+                     best_c = draws_best$c, 
+                     worst_c = draws_worst$c)
+
+ggplot(joint_data) +
+  geom_density(aes(best_w1), alpha = 0.4, fill = "darkgreen") +
+  geom_density(aes(worst_w1), alpha = 0.4, fill = "red") +
+  theme_bw() +
+  labs(x = "weight for feature 1", title = "Posteriors for weight[1]") +
+
+ggplot(joint_data) +
+  geom_density(aes(best_w2), alpha = 0.4, fill = "darkgreen") +
+  geom_density(aes(worst_w2), alpha = 0.4, fill = "red") +
+  theme_bw() +
+  labs(x = "weight for feature 2", title = "Posteriors for weight[2]")
+
+ggplot(joint_data) +
+  geom_density(aes(best_w3), alpha = 0.4, fill = "darkgreen") +
+  geom_density(aes(worst_w3), alpha = 0.4, fill = "red") +
+  theme_bw() +
+  labs(x = "weight for feature 3", title = "Posteriors for weight[3]") +
+
+ggplot(joint_data) +
+  geom_density(aes(best_w4), alpha = 0.4, fill = "darkgreen") +
+  geom_density(aes(worst_w4), alpha = 0.4, fill = "red") +
+  theme_bw() +
+  labs(x = "weight for feature 4", title = "Posteriors for weight[4]")
+
+ggplot(joint_data) +
+  geom_density(aes(best_w5), alpha = 0.4, fill = "darkgreen") +
+  geom_density(aes(worst_w5), alpha = 0.4, fill = "red") +
+  theme_bw() +
+  labs(x = "weight for feature 5", title = "Posteriors for weight[5]") +
+
+ggplot(joint_data) +
+  geom_density(aes(best_c), alpha = 0.4, fill = "darkgreen") +
+  geom_density(aes(worst_c), alpha = 0.4, fill = "red") +
+  theme_bw() +
+  labs(x = "c", title = "Posteriors for c")
+```
