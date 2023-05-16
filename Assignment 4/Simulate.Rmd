@@ -1,0 +1,231 @@
+---
+title: "Simulate"
+author: "Astrid Nørgaard Fonager"
+date: "2023-05-16"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r setup, include=FALSE}
+library(pacman)
+pacman::p_load(tidyverse,
+        here,
+        posterior,
+        cmdstanr,
+        brms, tidybayes, future, purrr, furrr, prettydoc, patchwork, stringr, ggpubr)
+```
+
+# SIMULATE EXPERIMENT
+
+```{r the stimuli}
+
+# Defining the stimuli, their height and position features, and their category
+stimulus <- seq(32)
+spots <- c(rep(0, 16), rep(1,16)) # 1 is arms up
+eyes <- c(rep(0, 8), rep(1, 8), rep(0, 8), rep(1, 8)) # 1 is eyes on stalk
+legs <- c(rep(c(0,0,1,1), 8)) # 1 is thick legs
+arms <- c(rep(c(0,0,0,0,1,1,1,1), 4)) # 1 is with spots
+color <- c(rep(c(0,1), 16)) # 1 green
+category <- as.factor(c(rep(0, 24), rep(1,8)))
+
+# Making this into a tibble
+stimuli <- tibble(stimulus, spots, eyes, legs, arms, color, category)
+
+# Plotting to make sure all looks right
+ggplot(stimuli, aes(spots, eyes, color = category, Label = stimulus)) +
+  geom_point (shape = 16, size = 3) +
+  #geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+  theme_bw()
+
+```
+
+```{r the experiment}
+# Generating the sequence of stimuli in the full experiment
+sequence <- c()
+stim_sequence <- c()
+
+for (i in 1:5) {
+  sequence <- sample(seq(32), replace = F)
+  stim_sequence <- c(stim_sequence, sequence)
+}
+
+# create an (almost) empty tibble with NAs for all the features. Only includes a column with the stimulus sequence
+experiment <- tibble(stimulus = stim_sequence, spots = NA, eyes = NA, legs = NA, arms = NA, color = NA, category = NA)
+for (i in seq(nrow(experiment))){
+  experiment$spots[i] <- stimuli$spots[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$eyes[i] <- stimuli$eyes[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$arms[i] <- stimuli$arms[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$legs[i] <- stimuli$legs[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$color[i] <- stimuli$color[stimuli$stimulus == experiment$stimulus[i]]
+  experiment$category[i] <- as.numeric(as.character(stimuli$category[stimuli$stimulus == experiment$stimulus[i]]))
+}
+```
+
+```{r functions: distance and similarity}
+# Distance
+distance <- function(vect1, vect2, w){
+  return(sum(w * abs(vect1 - vect2)))
+}
+
+# Similarity
+similarity <- function(distance, c){
+  return(exp((-c) * distance))
+}
+
+```
+
+```{r}
+# Let's assess similarity
+dd <- tibble(
+  expand_grid(
+    distance = c(0,.1,.2, .3, 4,.5,1,1.5,2,3,4,5,6),
+    c = c(0.1, 0.2, 0.5, 0.7, 1, 1.5, 2, 3, 5, 6))) %>%
+  mutate(
+    similarity = similarity(distance, c)
+  )
+
+dd %>% mutate(c = factor(c)) %>%
+  ggplot() +
+  geom_line(aes(distance, similarity, group = c, color = c)) +
+  theme_bw()
+```
+
+
+```{r function: model}
+###generative model ###
+gcm <-  function(w, c, obs, cat_one, quiet = TRUE){
+  # create an empty list to save probability of saying "1" for each trial
+  r <- c()
+  ntrials <- nrow(obs)
+  
+  for (i in 1: ntrials) {
+    # If quiet is FALSE, print every ten trials
+    if (!quiet && i %% 10 == 0){
+      print(paste("i =", i))
+    }
+    
+    # if this is the first trial, or there any category with no exemplars seen yet, set the choice to random
+    if (i == 1 || sum(cat_one[1:(i-1)]) == 0 || sum(cat_one[1:(i-1)]) == (i-1)) {
+      r <- c(r, .5)
+    } else {
+      similarities <- c()
+      # for each previously seen stimulus assess distance and similarity
+      for (e in 1:(i-1)) {
+        sim <- similarity(distance(obs[i,], obs[e, ], w), c)
+        similarities <- append(similarities, sim)
+      }
+      # Calculate prob of saying "1" by dividing similarity to 1 by the sum of similarity to 1 and to 0
+      numerator <- 0.5 * sum(similarities[cat_one[1:(i-1)] == 1])
+      denominator <- 0.5 * sum(similarities[cat_one[1:(i - 1)] == 1]) + 0.5 * sum(similarities[cat_one[1:(i - 1)] == 0])
+      r <- c(r, numerator / denominator)
+    }
+  }
+    
+  return(rbinom(ntrials, 1, r))
+}
+
+```
+
+
+```{r function: simulate responses}
+# function for simulation responses
+simulate_responses <- function(agent, w, c){
+
+  observations <- experiment %>%
+    dplyr::select(c("spots", "eyes", "legs", "arms", "color"))
+  
+  category <- experiment$category
+  
+  if (w == "equal") {
+    weight <- rep(1 / 5, 5)
+  } else if (w == "skewed1") {
+    weight <- c(0.6, rep(0.1, 4))
+  } else if (w == "skewed2") {
+    weight <-  c(0.1, 0.6, rep(0.1,3))
+  } else if (w == "skewed3") {
+    weight <-  c(0.1, 0.1, 0.6, 0.1, 0.1)
+  } else if (w == "skewed4") {
+    weight <-  c(0.1, 0.1, 0.1, 0.6, 0.1)
+  } else if (w == "skewed5") {
+    weight <-  c(0.1, 0.1, 0.1, 0.1, 0.6)
+  }
+
+  # simulate responses
+  responses <- gcm(
+    weight,
+    c,
+    observations,
+    category
+  )
+
+  tmp_simulated_responses <- experiment %>%
+    mutate(
+      trial = seq(nrow(experiment)),
+      sim_response = responses,
+      correct = ifelse(category == sim_response, 1, 0),
+      performance = cumsum(correct) / seq_along(correct),
+      c = c,
+      w = w,
+      agent = agent
+    )
+
+  return(tmp_simulated_responses)
+}
+
+```
+
+
+```{r simulate and save data}
+
+param_df <- dplyr::tibble(
+  expand_grid(
+    agent = 1:10,
+    c = seq(0.1, 3, 0.2),
+    w = c("equal", "skewed1", "skewed2", "skewed3", "skewed4", "skewed5")
+  )
+)
+
+start_time <- sys.time()
+simulated_responses <- future_pmap_dfr(param_df,
+                                       simulate_responses,
+                                       .options = furrr_options(seed = TRUE)
+) 
+end_time <- sys.time()
+end_time - start_time
+# Time difference of 6 hours
+
+write.csv(simulated_responses, "data/simulated_responses_160t.csv")
+```
+
+
+```{r load simulated data}
+
+simulated_responses <- read.csv("data/simulated_responses_160t.csv")
+
+```
+
+
+# PLOT 
+```{r plot simulated responses}
+
+p3 <-  simulated_responses %>%
+  mutate(w = as.factor(w)) %>%
+  ggplot(aes(trial, performance, group = w, color = w)) +
+  geom_smooth(se = F) +
+  theme_bw() +
+  facet_wrap(c ~ .)
+
+p4 <- simulated_responses %>%
+  mutate(c = as.factor(c)) %>%
+  ggplot(aes(trial, performance, group = c, color = c)) +
+  geom_smooth(se = F) +
+  theme_bw() +
+  facet_wrap(w ~.)
+
+p3 + p4
+
+```
