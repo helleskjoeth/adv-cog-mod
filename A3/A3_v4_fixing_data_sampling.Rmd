@@ -43,6 +43,8 @@ WeightedBayes_f <-  function(bias, rating1, other, weight_self, weight_other){
 
 ```{r sim data}
 # values
+#seed <- 123
+
 trials <- 100
 bias <- 0
 
@@ -101,28 +103,10 @@ mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
 ```
 
 ```{r draw samples}
-# # make data list
-#   data_simpleBayes <- list(
-#   trials = trials,
-#   rating2 = df_SB$rating2_probability, # outcome variable
-#   rating1 = df_SB$rating1_probability, # parameter
-#   other = df_SB$other_probability # parameter
-# )
-
-# testing kathrine's model
-# # make data list
-#   data_simpleBayes <- list(
-#   trials = ntrials,
-#   rating2 = s_df$temp_c, # outcome variable
-#   rating1 = s_df$Source1, # parameter
-#   other = s_df$Source2 # parameter
-# )
-
-# experiment with rating2 on 1-8 scale
 # make data list
   data_simpleBayes <- list(
   trials = trials,
-  rating2 = df_SB$rating2, # outcome variable
+  rating2 = df_SB$rating2, # outcome variable on rating scale 1-8
   rating1 = df_SB$rating1_probability, # parameter
   other = df_SB$other_probability # parameter
 )
@@ -144,7 +128,7 @@ samples_SB <- mod_simpleBayes$sample(
 
 # SB diagnostics
 ```{r stan diagnose}
-samples_SB$cmdstan_diagnose() 
+samples_SB$cmdstan_diagnose()
 samples_SB$summary()
 samples_SB$loo()
 ```
@@ -177,6 +161,7 @@ ggplot(draws_SB) +
   ylab("Posterior Density") +
   xlab("Bias") + 
   theme_classic() + 
+  theme(axis.title.x=element_blank()) +
   #labs(title = "Prior and posterior distribution of bias") +
   labs(title = "Bias") +
 # sd 
@@ -184,7 +169,8 @@ ggplot(draws_SB) +
   geom_density(aes(SD), fill="blue", alpha=0.3) +
   geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
   ylab("Posterior Density") +
-  theme_classic() + 
+  theme_classic() +
+  theme(axis.title.x=element_blank()) +
   #labs(title = "Prior and posterior distribution of SD")
   labs(title = "SD")
 ```
@@ -192,8 +178,8 @@ ggplot(draws_SB) +
 ```{r post preds plot}
 pacman::p_load(scales)
 
-draws_SB %>% mutate(
-  preds = round(inv_logit_scaled(`post_preds[2]`)*9, 0)) %>% select(preds) %>%  print(round(inv_logit_scaled(preds)*9, 0)) #
+# draws_SB %>% mutate(
+#   preds = round(inv_logit_scaled(`post_preds[2]`)*9, 0)) %>% select(preds) %>%  print(round(inv_logit_scaled(preds)*9, 0)) #
 
 draws_SB %>% mutate(
   preds = round(inv_logit_scaled(`post_preds[1]`)*9, 0)
@@ -201,17 +187,47 @@ draws_SB %>% mutate(
   ggplot() + 
   geom_histogram(aes(preds)) +
   labs(title = "Post. predictions for trial 1") +
+  geom_vline(xintercept = 6, linetype="dotted", # get actual answer from sim. data 
+                color = "red", size= 1) +
   theme_classic() + 
+  labs(x_axis = 'rating2 predictions') +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 2)) +
+  
 
   draws_SB %>% mutate(
-  preds = round(inv_logit_scaled(`post_preds[2]`)*9, 0)
+  preds = round(inv_logit_scaled(`post_preds[9]`)*9, 0)
   ) %>% 
   ggplot() + 
   geom_histogram(aes(preds)) + 
-  labs(title = "Post. predictions for trial 2") + 
+  labs(title = "Post. predictions for trial 9") + 
+  geom_vline(xintercept = 4, linetype="dotted", 
+                color = "red", size= 1) +
   theme_classic() + 
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 2)) +
+  
+  
+    draws_SB %>% mutate(
+  preds = round(inv_logit_scaled(`post_preds[17]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) + 
+  labs(title = "Post. predictions for trial 17") + 
+  geom_vline(xintercept = 4, linetype="dotted", 
+                color = "red", size= 1) +
+  theme_classic() + 
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 2))  
+    
+    
+  draws_SB %>% mutate(
+  preds = round(inv_logit_scaled(`post_preds[36]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) + 
+  labs(title = "Post. predictions for trial 36") + 
+  geom_vline(xintercept = 6, linetype="dotted", 
+                color = "red", size= 1) +
+  theme_classic() + 
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 2))
 ```
 
 Very little variation in the post preds of the SB with bias 0.
@@ -221,6 +237,7 @@ Also very little variation in the post preds when bias = 0.4.
 # simulate data for WB
 
 ```{r}
+#seed <- 123
 trials <- 100
 bias <- 0.5
 weight_self <- 0.2
@@ -283,26 +300,10 @@ model_WB <- cmdstan_model(file,
 
 # draw samples
 ```{r}
-# own model 
-# data_weighted_Bayes <- list(
-#   trials = trials,
-#   rating2 = df_WB$rating2_probability, # outcome variable
-#   rating1 = df_WB$rating1_probability, # parameter
-#   other = df_WB$other_probability # parameter
-# )
-
-# testing kathrine's model
-# data_weighted_Bayes <- list(
-#   trials = ntrials,
-#   rating2 = w_df$temp_c, # outcome variable
-#   rating1 = w_df$Source1, # parameter
-#   other = w_df$Source2 # parameter
-# )
-
 # experiment with rating2 on 1-8 scale - works
 data_weighted_Bayes <- list(
   trials = trials,
-  rating2 = df_WB$rating2, # outcome variable
+  rating2 = df_WB$rating2, # outcome variable on rating scale!
   rating1 = df_WB$rating1_probability, # parameter
   other = df_WB$other_probability # parameter
 )
@@ -357,7 +358,7 @@ ggplot(draws_WB, aes(.iteration, w_self, group = .chain, color=.chain)) +
 # w2
 ggplot(draws_WB, aes(.iteration, w_other, group = .chain, color=.chain)) + 
   geom_line() +
-  labs(title = "Weighted Bayes - w_self") +
+  labs(title = "Weighted Bayes - w_other") +
   theme_classic()
 
 ```
@@ -373,6 +374,7 @@ ggplot(draws_WB) +
   xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
+  theme(axis.title.x=element_blank()) +
   #labs(title = "Prior and post distribution of bias")
   labs(title = "Bias") + 
 
@@ -383,6 +385,7 @@ ggplot(draws_WB) +
   xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
+  theme(axis.title.x=element_blank()) +
   #labs(title = "Prior and post distribution of SD") + 
   labs(title = "SD") + 
   
@@ -393,6 +396,7 @@ ggplot(draws_WB) +
   xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
+  theme(axis.title.x=element_blank()) +
   #labs(title = "Prior and post distribution of weight self")
   labs(title = "Weight self") +
 
@@ -403,6 +407,7 @@ ggplot(draws_WB) +
   xlab("Rate") + # Tendency to choose 1 ??
   ylab("Posterior Density") +
   theme_classic() + 
+  theme(axis.title.x=element_blank()) +
   #labs(title = "Prior and post distribution of weight other")
   labs(title = "Weight other")
 ```
@@ -410,19 +415,6 @@ ggplot(draws_WB) +
 
 # post preds plot
 ```{r}
-draws_WB %>% mutate(
-  preds = round(inv_logit_scaled(`post_preds[5]`)*9, 0) 
-) %>% 
-  ggplot() + 
-  geom_histogram(aes(preds)) 
-
-draws_WB %>% mutate(
-  preds = round(inv_logit_scaled(`post_preds[45]`)*9, 0) 
-) %>% 
-  ggplot() + 
-  geom_histogram(aes(preds)) 
-
-
 # not a lot of variance in the post preds. does that mean that the model is very certain?
 draws_WB %>% mutate(
   preds = round(inv_logit_scaled(`post_preds[1]`)*9, 0)
@@ -430,8 +422,10 @@ draws_WB %>% mutate(
   ggplot() + 
   geom_histogram(aes(preds)) +
   labs(title = "Post. predictions for trial 1") +
+  geom_vline(xintercept = 7, linetype="dotted", 
+                color = "red", size= 1) +
   theme_classic() + 
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 9))+ 
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 4))+ 
 draws_WB %>% mutate(
   preds = round(inv_logit_scaled(`post_preds[2]`)*9, 0),
   preds = ifelse(preds > 8, 8, ifelse(preds < 1, 1, preds))
@@ -439,6 +433,8 @@ draws_WB %>% mutate(
   ggplot() + 
   geom_histogram(aes(preds)) + 
   labs(title = "Post. predictions for trial 2") + 
+  geom_vline(xintercept = 2, linetype="dotted", 
+                color = "red", size= 1) +
   theme_classic() + 
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 9))
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 5))
 ```

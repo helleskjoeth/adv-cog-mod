@@ -464,7 +464,9 @@ ggplot(draws_WB) +
 
 # check participant 1, trial 1 - GOOD FIT
 draws_WB %>% mutate(
-  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0)) %>% 
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0), 
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#77ab59") + 
@@ -477,7 +479,9 @@ draws_WB %>% mutate(
 
 # check participant 1, trial 2 - WORSE FIT
 draws_WB %>% mutate(
-  predictions = round(inv_logit_scaled(`post_preds[2]`)*9, 0)) %>% 
+  predictions = round(inv_logit_scaled(`post_preds[2]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#77ab59") + 
@@ -488,7 +492,9 @@ draws_WB %>% mutate(
   labs(title = "WB: participant 1, trial 2, face ID 11") +
 
 draws_WB %>% mutate(
-  predictions = round(inv_logit_scaled(`post_preds[10]`)*9, 0)) %>% 
+  predictions = round(inv_logit_scaled(`post_preds[10]`)*9, 0), 
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#77ab59") + 
@@ -499,7 +505,9 @@ draws_WB %>% mutate(
   labs(title = "WB: participant 1, trial 10, faceID 19") +
 
 draws_WB %>% mutate(
-  predictions = round(inv_logit_scaled(`post_preds[13]`)*9, 0)) %>% 
+  predictions = round(inv_logit_scaled(`post_preds[13]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#77ab59") + 
@@ -524,11 +532,11 @@ mean(greater_WB$n) # 41.3871
 mean(lesser_WB$n) # 37.26667
 37.26667/6000*100 # 0.62%
 
-
+0.699785 + 0.6211112 # 1.320896 0 1.32 %
 ```
 
 
-# Model comparison - Sigrid's version - testing stuff
+# Model comparison - 1 participant
 ```{r}
 Loo_SB <- fit2SB$loo(save_psis = TRUE, cores = 4)
 Loo_WB <- fit2WB$loo(save_psis = TRUE, cores = 4)
@@ -540,13 +548,12 @@ plot(Loo_SB)
 plot(Loo_WB)
 
 loo_compare(Loo_SB, Loo_WB)
-loo_model_weights(list(Loo_SB, Loo_WB))
-```
 
-```{r}
+loo_model_weights(list(Loo_SB, Loo_WB))
+
 # make riccardo's plot
 elpd <- tibble(
-  n = seq(70),
+  n = seq(70), # trials 
   model_diff_elpd = 
   Loo_WB$pointwise[, "elpd_loo"]  -  
     Loo_SB$pointwise[, "elpd_loo"]
@@ -557,11 +564,12 @@ ggplot(elpd, aes(x = n, y = model_diff_elpd)) +
   #xlim(.5,1.01) +
   ylim(-1.5,1.5) +
   geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
-  theme_bw()
+  theme_bw() + 
+  labs(title = "PSIS diagnostic plot")
 ```
 if the points are above zero = elpd loo of WB is greater than elpd loo of SB
 
-# MODEL COMPARISON - Astrid's version
+# MODEL COMPARISON- all participants 
 
 When we have multiple participants:
 - fit each model for each participant (subset for all participants and fit SB and WB to the data)
@@ -584,24 +592,6 @@ compare <- function(fit1 = fit2SB, fit2 = fit2WB, id){
   return(df)
 }
 ```
-
-
-
-```{r}
-# testing stuff
-
-hep <- compare(fit1 = fit2SB, fit2 = fit2WB, 1)
-hep2 <- compare(fit1 = fit2SB, fit2 = fit2WB, 2)
-
-test = rbind(hep, hep2)
-
-hep_t <- tibble()
-for(i in 1:3){
-  tmp = compare(fit1 = fit2SB, fit2 = fit2WB, i)
-  hep_t = rbind(hep_t, tmp)
-}
-```
-
 
 ```{r loop through participants}
 # there is no participant 33 
