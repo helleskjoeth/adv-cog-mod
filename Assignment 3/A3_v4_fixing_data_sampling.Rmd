@@ -1,0 +1,470 @@
+---
+title: "A3"
+author: "Sigrid Agersnap Bom Nielsen"
+date: "2023-04-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r packages, include=FALSE}
+library(pacman)
+pacman::p_load(tidyverse, 
+               brms,
+               cmdstanr,
+               patchwork,
+               boot)
+```
+
+# functions
+
+```{r simple bayes f}
+SimpleBayes_f <- function(bias, rating1, other){
+  outcome <- inv_logit_scaled(bias + 0.5*logit_scaled(rating1) +0.5*logit_scaled(other))
+  
+  return(outcome)
+}
+```
+
+```{r weighted bayes f}
+WeightedBayes_f <-  function(bias, rating1, other, weight_self, weight_other){
+  w1 <- 0.5 * weight_self + 0.5 # transform from a [0;1] space to a [0.5;1] space
+  w2 <- 0.5 * weight_other + 0.5
+  outcome <- inv_logit_scaled(bias + w1 * logit_scaled(rating1) + w2 * logit_scaled(other))
+  return(outcome)
+}
+```
+
+############################## Simple Bayes ###############################
+
+# simulate data for SB
+
+```{r sim data}
+# values
+#seed <- 123
+
+trials <- 100
+bias <- 0
+
+# empty lists
+trial_no <- rep(NA, trials)
+feedback <- rep(NA, trials)
+rating1 <- rep(NA, trials)
+other <- rep(NA, trials)
+rating2 <- rep(NA,trials)
+rating1_probability <- rep(NA,trials)
+rating2_probability <- rep(NA,trials)
+other_probability <- rep(NA,trials)
+
+# creating rating and other
+for (i in 1:trials){
+  rating1[i] <- round(inv_logit_scaled(rnorm(1, 0, 0.85))*9, 0)
+  
+  # fixing out of bounds
+  rating1[i] = ifelse(rating1[i] > 8, 8,
+                      ifelse(rating1[i]<1, 1,
+                             rating1[i]))
+
+  rating1_probability[i] = rating1[i]/9
+  
+  # from Kathrine's code - fixing bounds
+  other[i] <- 0
+  while (other[i] < 1 | other[i] > 8){ # while group rating out of scope
+    feedback[i] <- sample(c(-3, -2, 0, 2, 3), 1, replace = TRUE)
+    other[i] = rating1[i] + feedback[i]
+  }
+  
+  # saving variables
+  trial_no[i] = i
+  other_probability[i] = other[i]/9
+
+# create rating2
+  rating2_probability[i] = SimpleBayes_f(bias, rating1_probability[i], other_probability[i])
+
+  # fixing bounds of rating2
+  rating2[i] <- ifelse(round(rating2_probability[i]*9,0) <1, 1,
+                       ifelse(round(rating2_probability[i]*9,0) > 8, 8,
+                       round(rating2_probability[i]*9, 0)))
+}
+
+# save in df
+df_SB <- tibble(
+  trial_no, bias, rating1, other, feedback, rating2, rating1_probability, other_probability, rating2_probability
+  )
+```
+
+
+```{r load SB stan file}
+file <- file.path("stan/SB_model.stan")
+mod_simpleBayes <- cmdstan_model(file, cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+```{r draw samples}
+# make data list
+  data_simpleBayes <- list(
+  trials = trials,
+  rating2 = df_SB$rating2, # outcome variable on rating scale 1-8
+  rating1 = df_SB$rating1_probability, # parameter
+  other = df_SB$other_probability # parameter
+)
+
+  # fit model to data
+samples_SB <- mod_simpleBayes$sample(
+  data = data_simpleBayes,
+ # fixed_param = TRUE,
+  seed = 1985,
+  chains = 2,
+  parallel_chains = 2,
+  threads_per_chain = 2,
+  iter_warmup = 1500,
+  iter_sampling = 3000,
+  refresh = 500
+)
+
+```
+
+# SB diagnostics
+```{r stan diagnose}
+samples_SB$cmdstan_diagnose()
+samples_SB$summary()
+samples_SB$loo()
+```
+
+#chains 
+```{r chains}
+draws_SB <- as_draws_df(samples_SB$draws())
+
+# bias
+ggplot(draws_SB, aes(.iteration, bias, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Simple Bayes - Bias") +
+  theme_classic() +
+  theme(legend.position = 'none') +
+
+# SD 
+ggplot(draws_SB, aes(.iteration, SD, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Simple Bayes - SD") +
+  theme_classic()
+
+```
+# SB prior and posterior update plots
+```{r}
+pacman::p_load(boot)
+# bias
+ggplot(draws_SB) +
+  geom_density(aes(inv.logit(bias)), fill="blue", alpha=0.3) +
+  geom_density(aes(inv.logit(bias_prior)), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  ylab("Posterior Density") +
+  xlab("Bias") + 
+  theme_classic() + 
+  theme(axis.title.x=element_blank()) +
+  #labs(title = "Prior and posterior distribution of bias") +
+  labs(title = "Bias") +
+# sd 
+ggplot(draws_SB) +
+  geom_density(aes(SD), fill="blue", alpha=0.3) +
+  geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  ylab("Posterior Density") +
+  theme_classic() +
+  theme(axis.title.x=element_blank()) +
+  #labs(title = "Prior and posterior distribution of SD")
+  labs(title = "SD")
+```
+# Post preds
+```{r post preds plot}
+pacman::p_load(scales)
+
+# draws_SB %>% mutate(
+#   preds = round(inv_logit_scaled(`post_preds[2]`)*9, 0)) %>% select(preds) %>%  print(round(inv_logit_scaled(preds)*9, 0)) #
+
+draws_SB %>% mutate(
+  preds = round(inv_logit_scaled(`post_preds[1]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) +
+  labs(title = "Post. predictions for trial 1",
+       x = 'rating') +
+  geom_point(x = 6, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  labs(x_axis = 'rating2 predictions') +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 2)) +
+  
+
+  draws_SB %>% mutate(
+  preds = round(inv_logit_scaled(`post_preds[9]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) + 
+  labs(title = "Post. predictions for trial 9",
+       x = 'rating') + 
+  geom_point(x = 4, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 2)) +
+  
+  
+    draws_SB %>% mutate(
+  preds = round(inv_logit_scaled(`post_preds[17]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) + 
+  labs(title = "Post. predictions for trial 17",
+       x = 'rating') + 
+  geom_point(x = 4, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 2)) +
+    
+    
+  draws_SB %>% mutate(
+  preds = round(inv_logit_scaled(`post_preds[36]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) + 
+  labs(title = "Post. predictions for trial 36",
+       x = 'rating') + 
+  geom_point(x = 6, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 2))
+```
+
+Very little variation in the post preds of the SB with bias 0.
+Also very little variation in the post preds when bias = 0.4.
+
+############################## Weighted Bayes ###############################
+# simulate data for WB
+
+```{r}
+#seed <- 123
+trials <- 100
+bias <- 0.5
+weight_self <- 0.2
+weight_other <- 0.7
+
+# empty lists
+trial_no <- rep(NA, trials)
+feedback <- rep(NA, trials)
+rating1 <- rep(NA, trials)
+other <- rep(NA, trials)
+rating2 <- rep(NA,trials)
+rating1_probability <- rep(NA,trials)
+rating2_probability <- rep(NA,trials)
+other_probability <- rep(NA,trials)
+
+for (i in 1:trials){
+  rating1[i] <- round(inv_logit_scaled(rnorm(1, 0, 0.85))*9, 0)
+
+  # fixing out of bounds
+  rating1[i] = ifelse(rating1[i] > 8, 8,
+                      ifelse(rating1[i]<1, 1, 
+                             rating1[i]))
+
+  rating1_probability[i] = rating1[i]/9
+
+  # from Kathrine's code - fixing bounds
+  other[i] <- 0
+  while (other[i] < 1 | other[i] > 8){ # while group rating out of scope
+    feedback[i] <- sample(c(-3, -2, 0, 2, 3), 1, replace = TRUE)
+    other[i] = rating1[i] + feedback[i]
+  }
+
+  # saving variables
+  trial_no[i] = i
+  other_probability[i] = other[i]/9
+  
+  # create rating 2
+  rating2_probability[i] = WeightedBayes_f(
+    bias, rating1_probability[i], other_probability[i], weight_self, weight_other
+    )
+
+  # fixing bounds of rating2
+  rating2[i] <- ifelse(round(rating2_probability[i]*9,0) <1, 1,
+                       ifelse(round(rating2_probability[i]*9,0) > 8, 8,
+                       round(rating2_probability[i]*9, 0)))
+}
+
+# save in df
+df_WB <- tibble(
+  trial_no, bias, weight_self, weight_other, rating1, other, feedback, rating2, rating1_probability, other_probability, rating2_probability)
+```
+
+# stan file
+```{r}
+file <- file.path("stan/WB_model.stan")
+model_WB <- cmdstan_model(file, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1"))
+```
+
+# draw samples
+```{r}
+# experiment with rating2 on 1-8 scale - works
+data_weighted_Bayes <- list(
+  trials = trials,
+  rating2 = df_WB$rating2, # outcome variable on rating scale!
+  rating1 = df_WB$rating1_probability, # parameter
+  other = df_WB$other_probability # parameter
+)
+
+samples_WB <- model_WB$sample(
+    data = data_weighted_Bayes,
+    fixed_param = FALSE,
+    seed = 1985,
+    chains = 2,
+    parallel_chains = 2,
+    threads_per_chain = 2,
+    iter_warmup = 1500,
+    iter_sampling = 3000,
+    refresh = 500
+    )
+```
+
+
+# stan diagnostics
+```{r}
+samples_WB$cmdstan_diagnose() # all good
+samples_WB$summary()
+samples_WB$loo()
+```
+No divergent transitions, treedepth is good, etc. 
+
+# chains
+```{r}
+draws_WB <- as_draws_df(samples_WB$draws())
+
+# Plot hairy caterpillars
+# bias
+ggplot(draws_WB, aes(.iteration, bias, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - Bias") +
+  theme_classic() + 
+  theme(legend.position = 'none') +
+
+# SD 
+ggplot(draws_WB, aes(.iteration, SD, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - SD") +
+  theme_classic() + 
+
+# w1
+ggplot(draws_WB, aes(.iteration, w_self, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes- w_self") +
+  theme_classic() + 
+  theme(legend.position = 'none') +
+
+# w2
+ggplot(draws_WB, aes(.iteration, w_other, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - w_other") +
+  theme_classic()
+
+```
+chains look good with bias = 0.5
+
+# prior and posterior update plots
+
+```{r}
+# bias
+ggplot(draws_WB) +
+  geom_density(aes(bias), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  theme(axis.title.x=element_blank()) +
+  #labs(title = "Prior and post distribution of bias")
+  labs(title = "Bias") + 
+
+# sd
+ggplot(draws_WB) +
+  geom_density(aes(SD), fill="blue", alpha=0.3) +
+  geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  theme(axis.title.x=element_blank()) +
+  #labs(title = "Prior and post distribution of SD") + 
+  labs(title = "SD") + 
+  
+# weight self
+ggplot(draws_WB) +
+  geom_density(aes(w_self), fill="blue", alpha=0.3) +
+  geom_density(aes(w_self_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  theme(axis.title.x=element_blank()) +
+  #labs(title = "Prior and post distribution of weight self")
+  labs(title = "Weight self") +
+
+# weight other
+ggplot(draws_WB) +
+  geom_density(aes(w_other), fill="blue", alpha=0.3) +
+  geom_density(aes(w_other_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  theme(axis.title.x=element_blank()) +
+  #labs(title = "Prior and post distribution of weight other")
+  labs(title = "Weight other")
+```
+
+
+# post preds plot
+```{r}
+# not a lot of variance in the post preds.
+  # trial 1, 9, 17, 36
+draws_WB %>%  mutate(
+  preds = round(inv_logit_scaled(`post_preds[1]`)*9, 0),
+  preds = ifelse(preds > 8, 8, ifelse(preds < 1, 1, preds)) 
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) +
+  labs(title = "Post. predictions for trial 1",
+       x = 'rating') +
+  geom_point(x = 8, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  labs(x_axis = 'rating2 predictions') +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) +
+  
+draws_WB %>%  mutate(
+  preds = round(inv_logit_scaled(`post_preds[9]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) +
+  labs(title = "Post. predictions for trial 9",
+       x = 'rating') +
+  geom_point(x = 5, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  labs(x_axis = 'rating2 predictions') +
+  #scale_x_continuous(breaks = scales::pretty_breaks(n = 4)) +
+  
+draws_WB %>%  mutate(
+  preds = round(inv_logit_scaled(`post_preds[17]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) +
+  labs(title = "Post. predictions for trial 17",
+       x = 'rating') +
+  geom_point(x = 6, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  labs(x_axis = 'rating2 predictions') +
+  
+draws_WB %>%  mutate(
+  preds = round(inv_logit_scaled(`post_preds[36]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) +
+  labs(title = "Post. predictions for trial 36",
+       x = 'rating') +
+  geom_point(x = 8, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  labs(x_axis = 'rating2 predictions') + 
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
+
+  
+
+```

@@ -1,0 +1,725 @@
+---
+title: "fitting_to_empirical_data"
+author: "Sigrid Agersnap Bom Nielsen"
+date: "2023-05-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(pacman)
+pacman::p_load(
+  tidyverse, 
+  brms, 
+  cmdstanr, 
+  scales, 
+  tidyr)
+```
+
+
+
+```{r load data}
+cogsci_data <- read.csv("data/cogsci_clean.csv") %>% 
+  na.omit() %>% 
+  mutate(
+    FirstRating_probability = FirstRating/9,
+    SecondRating_probability = SecondRating/9,
+    GroupRating_probability = GroupRating/9
+  )
+
+cogsci_data$FirstRating <- as.factor(cogsci_data$FirstRating)
+cogsci_data$SecondRating <- as.factor(cogsci_data$SecondRating)
+cogsci_data$Change <- as.factor(cogsci_data$Change)
+
+```
+
+# DATA INSPECTION
+```{r ratings}
+
+# first rating
+cogsci_data %>% 
+  ggplot(aes(FirstRating)) +
+  geom_bar() +
+  theme_classic()
+
+mean(cogsci_data$FirstRating)
+sd(cogsci_data$FirstRating)
+
+# second rating
+cogsci_data %>% 
+  ggplot(aes(SecondRating)) +
+  geom_bar() +
+  theme_classic()
+
+mean(cogsci_data$SecondRating)
+sd(cogsci_data$SecondRating)
+
+```
+
+```{r Change: figure 1}
+# fig 1a
+cogsci_data %>% 
+  ggplot(aes(Change)) +
+  geom_bar()
+
+# fig 1b
+cogsci_data %>% 
+  ggplot(aes(FirstRating, SecondRating)) +
+  geom_jitter()
+
+```
+
+```{r feedback vs. change: figure 2}
+
+# fig 2a
+cogsci_data %>% 
+  ggplot(aes(Change, Feedback, color = Change)) +
+  geom_boxplot() +
+  theme_classic()
+
+# fig 2b
+cogsci_data %>% 
+  ggplot() +
+  geom_density(aes(Change), fill="blue", alpha=0.3) +
+  geom_density(aes(Feedback), fill="red", alpha=0.3) +
+  theme_classic()
+
+
+```
+
+# IMPORT MODELS
+```{r import model}
+# Simple Bayes model
+file_SB <- file.path("stan/SB_model.stan")
+model_SB <- cmdstan_model(file_SB, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+
+# Weighted Bayes model
+file_WB <- file.path("stan/WB_model.stan")
+model_WB <- cmdstan_model(file_WB, 
+                     cpp_options = list(stan_threads = TRUE),
+                     stanc_options = list("O1")) 
+```
+# FIT TO DATA
+
+```{r function: prepare data}
+prep_data <- function(data, id){
+  df <- data %>% 
+    filter(ID == id)
+  
+  data_list <- list(
+  trials = nrow(df),
+  rating2 = df$SecondRating, # not in probability
+  rating1 = df$FirstRating_probability,
+  other = df$GroupRating_probability 
+  )
+  
+  return(data_list)
+}
+
+# test
+p1_data <- prep_data(cogsci_data, id = 22)
+```
+
+
+```{r function: fit model to data}
+
+fit_model <- function(data, model, clean = TRUE){
+  
+  if(model == "SB") {
+    # fit Simple Bayes model to data
+    samples <- model_SB$sample(
+      data = data,
+      seed = 1985,
+      chains = 2,
+      parallel_chains = 2,
+      threads_per_chain = 2,
+      iter_warmup = 1500,
+      iter_sampling = 3000,
+      refresh = 500
+    )
+  }
+  
+  else if(model == "WB"){
+  # fit Weighted Bayes model to data
+    samples <- model_WB$sample(
+      data = data,
+      seed = 1985,
+      chains = 2,
+      parallel_chains = 2,
+      threads_per_chain = 2,
+      iter_warmup = 1500,
+      iter_sampling = 3000,
+      refresh = 500
+    )
+  }
+  
+  if(clean == TRUE) {
+  # get samples
+  draws_df <- as_draws_df(samples$draws())
+  
+  return(draws_df)
+  }
+  
+  else if(clean == FALSE){
+    return(samples)
+  }
+}
+
+```
+
+## Simple Bayes
+
+```{r fit to SB}
+
+# test
+fit2SB <- fit_model(p1_data, model = "SB", clean = F)
+
+```
+
+```{r check model quality}
+
+fit2SB$cmdstan_diagnose()
+
+# Plot hairy caterpillars
+draws_SB <- as_draws_df(fit2SB$draws())
+
+# bias
+ggplot(draws_SB, aes(.iteration, bias, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Simple Bayes - Bias") +
+  theme_classic() +
+  theme(legend.position = 'none') +
+
+# SD 
+ggplot(draws_SB, aes(.iteration, SD, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Simple Bayes - SD") +
+  theme_classic()
+
+############### parameter estimates
+# bias
+ggplot(draws_SB) +
+  geom_density(aes(bias), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Bias") +
+
+# sd 
+ggplot(draws_SB) +
+  geom_density(aes(SD), fill="blue", alpha=0.3) +
+  geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "SD")
+```
+
+
+
+
+
+```{r plot fit to SB}
+# code requires running fit_model with clean = T
+
+# check participant 1, trial 1 - GOOD FIT
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) # fixing out of bounds
+  ) %>% 
+  ggplot() + 
+  aes(predictions) + 
+  geom_histogram(fill = "#36802d") + 
+  geom_vline(xintercept = 6, linetype="dotted", 
+                color = "red", size=1) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) +
+  theme_bw()+ 
+  labs(title = "SB: participant 22, trial 1, faceID 10") +
+
+
+# check participant 1, trial 2 - WORSE FIT
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[2]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
+  ggplot() + 
+  aes(predictions) + 
+  geom_histogram(fill = "#36802d") + 
+  geom_vline(xintercept = 5, linetype="dotted", 
+                color = "red", size= 1) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
+  theme_bw()+ 
+  labs(title = "SB: participant 22, trial 2, faceID 11") +
+
+
+# check participant 1, trial 10
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[10]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
+  ggplot() + 
+  aes(predictions) + 
+  geom_histogram(fill = "#36802d") + 
+  geom_vline(xintercept = 7, linetype="dotted", 
+                color = "red", size= 1) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
+  theme_bw()+ 
+  labs(title = "SB: participant 22, trial 10, faceID 19") + # goes up to 9
+
+# check participant 1, trial 11
+draws_SB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[13]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
+  ggplot() + 
+  aes(predictions) + 
+  geom_histogram(fill = "#36802d") + 
+  geom_vline(xintercept = 3, linetype="dotted", 
+                color = "red", size= 1) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
+  theme_bw()+ 
+  labs(title = "SB: participant 22, trial 13, faceID 21") 
+
+```
+Checking how many times predictions were out of bounds.
+
+```{r}
+# create "greater" function which counts how many times predictions were > 8
+greater_f <- function(draws){
+  greater = tibble() 
+  greater_no = tibble()
+  
+  for (i in 1:70){
+  col_no = i
+  post_no = paste0("post_preds[", col_no, "]") # paste number into column name
+  
+  # get predictions which are greater than 8
+  tmp2 = tibble() #placeholder
+  tmp = draws %>% 
+    mutate(
+    predictions = round(inv_logit_scaled(!!as.name(post_no))*9, 0)) %>% 
+    count(predictions > 8) 
+  
+  # counting number of times predictions were greater than 8 and binding it to a df
+  if(any(tmp == T)){
+    tmp2 = rbind(tmp2, tmp)
+    tmp2 = tmp2 %>% slice(2)
+    greater = rbind(greater, tmp2)
+    greater_no = rbind(greater_no, post_no)
+  }
+}
+  # fixing column names
+ # greater_no <- greater_no %>%
+ # rename("pred_no" = "X.post_preds.1..")
+ #  
+  # cbinding the name of the post preds and how many times they were out of bounds
+  greater <- cbind(greater_no, greater)
+  
+  return(greater)
+}
+
+# create lesser_f which count how many times predictions were < 1
+lesser_f <- function(draws){
+  lesser = tibble() 
+  lesser_no = tibble()
+  
+  for (i in 1:70){
+  col_no = i
+  post_no = paste0("post_preds[", col_no, "]") # paste number into column name
+  
+  # get predictions which are less than 1
+  tmp2 = tibble() #placeholder
+  tmp = draws %>% 
+    mutate(
+    predictions = round(inv_logit_scaled(!!as.name(post_no))*9, 0)) %>% 
+    count(predictions < 1) 
+  
+  # counting number of times predictions were less than 1 and binding it to a df
+  if(any(tmp == T)){
+    tmp2 = rbind(tmp2, tmp)
+    tmp2 = tmp2 %>% slice(2)
+    lesser = rbind(lesser, tmp2)
+    lesser_no = rbind(lesser_no, post_no)
+  }
+}
+  # fixing column names
+ # lesser_no <- lesser_no %>%
+ # rename("pred_no" = "X.post_preds.1..")
+ #  
+  # cbinding the name of the post preds and how many times they were out of bounds
+  lesser <- cbind(lesser_no, lesser)
+  
+  return(lesser)
+}
+```
+
+```{r}
+# using the functions to investigate how often the model samples extreme values 
+greater <- greater_f(draws_SB)
+lesser <- lesser_f(draws_SB)
+```
+
+```{r}
+# getting the details 
+# mean no of predictions > 8
+mean(greater$n) # 60.97
+60.97/6000 * 100 # ~ 1% of 6000 iterations per trial
+
+# mean no of predictions < 1
+mean(lesser$n) # 82.3
+82.2/6000*100 # ~ 1.37%
+```
+
+## Weighted Bayes
+
+```{r fit to WB}
+# test
+fit2WB <- fit_model(p1_data,  model = "WB", clean = F)
+```
+
+```{r check model quality}
+fit2WB$cmdstan_diagnose()
+fit2WB$summary()
+fit2WB$loo()
+```
+
+
+```{r check model quality}
+# Plot hairy caterpillars
+draws_WB <- as_draws_df(fit2WB$draws())
+
+# bias
+ggplot(draws_WB, aes(.iteration, bias, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - Bias") +
+  theme_classic() + 
+  theme(legend.position = 'none') +
+
+# SD 
+ggplot(draws_WB, aes(.iteration, SD, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - SD") +
+  theme_classic() +
+
+# w1
+ggplot(draws_WB, aes(.iteration, w_self, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - Weight self") +
+  theme_classic() +
+  theme(legend.position = 'none') +
+
+# w2
+ggplot(draws_WB, aes(.iteration, w_other, group = .chain, color=.chain)) + 
+  geom_line() +
+  labs(title = "Weighted Bayes - Weight other") +
+  theme_classic()
+
+
+####### parameter estimates
+
+# bias
+ggplot(draws_WB) +
+  geom_density(aes(bias), fill="blue", alpha=0.3) +
+  geom_density(aes(bias_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Bias") + 
+
+# sd
+ggplot(draws_WB) +
+  geom_density(aes(SD), fill="blue", alpha=0.3) +
+  geom_density(aes(SD_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "SD") +
+
+# weight self
+ggplot(draws_WB) +
+  geom_density(aes(w_self), fill="blue", alpha=0.3) +
+  geom_density(aes(w_self_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Weight self") + 
+  coord_cartesian(xlim = c(0, 1.25)) +
+
+# weight other
+ggplot(draws_WB) +
+  geom_density(aes(w_other), fill="blue", alpha=0.3) +
+  geom_density(aes(w_other_prior), fill="red", alpha=0.3) + # inv.logit bias_win_prior
+  xlab("Rate") + # Tendency to choose 1 ??
+  ylab("Posterior Density") +
+  theme_classic() + 
+  labs(title = "Weight other")+
+    coord_cartesian(xlim = c(0, 1.25))
+
+```
+
+```{r plot fit to WB}
+# code requires running fit_model with clean = T
+
+# check participant 1, trial 1 - GOOD FIT
+draws_WB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[1]`)*9, 0), 
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
+  ggplot() + 
+  aes(predictions) + 
+  geom_histogram(fill = "#77ab59") + 
+  geom_vline(xintercept = 6, linetype="dotted", 
+                color = "red", size=1) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) +
+  theme_bw()+ 
+  labs(title = "WB: participant 22, trial 1, face ID 10") +
+
+
+# check participant 1, trial 2 - WORSE FIT
+draws_WB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[2]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
+  ggplot() + 
+  aes(predictions) + 
+  geom_histogram(fill = "#77ab59") + 
+  geom_vline(xintercept = 5, linetype="dotted", 
+                color = "red", size= 1) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
+  theme_bw()+ 
+  labs(title = "WB: participant 22, trial 2, face ID 11") +
+
+draws_WB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[10]`)*9, 0), 
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
+  ggplot() + 
+  aes(predictions) + 
+  geom_histogram(fill = "#77ab59") + 
+  geom_vline(xintercept = 7, linetype="dotted", 
+                color = "red", size= 1) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
+  theme_bw()+ 
+  labs(title = "WB: participant 22, trial 10, faceID 19") +
+
+draws_WB %>% mutate(
+  predictions = round(inv_logit_scaled(`post_preds[13]`)*9, 0),
+  predictions = ifelse(predictions > 8, 8, ifelse(predictions < 1, 1, predictions)) 
+  ) %>% 
+  ggplot() + 
+  aes(predictions) + 
+  geom_histogram(fill = "#77ab59") + 
+  geom_vline(xintercept = 3, linetype="dotted", 
+                color = "red", size= 1) +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
+  theme_bw()+ 
+  labs(title = "WB: participant 22, trial 13, faceID 21")
+
+
+
+```
+# checking post preds out of bounds
+
+```{r}
+greater_WB <- greater_f(draws_WB)
+lesser_WB <- lesser_f(draws_WB)
+
+mean(greater_WB$n) # 41.3871
+41.3871/6000*100 # 0.69%
+
+mean(lesser_WB$n) # 37.26667
+37.26667/6000*100 # 0.62%
+
+0.699785 + 0.6211112 # 1.320896 ~ 1.32 %
+```
+
+
+# Model comparison - 1 participant
+```{r}
+Loo_SB <- fit2SB$loo(save_psis = TRUE, cores = 4)
+Loo_WB <- fit2WB$loo(save_psis = TRUE, cores = 4)
+
+Loo_SB
+Loo_WB
+
+plot(Loo_SB)
+plot(Loo_WB)
+
+loo_compare(Loo_SB, Loo_WB)
+
+loo_model_weights(list(Loo_SB, Loo_WB))
+
+# make riccardo's plot
+elpd <- tibble(
+  n = seq(70), # trials 
+  model_diff_elpd = 
+  Loo_WB$pointwise[, "elpd_loo"]  -  
+    Loo_SB$pointwise[, "elpd_loo"]
+)
+
+ggplot(elpd, aes(x = n, y = model_diff_elpd)) +
+  geom_point(alpha = .5) +
+  #xlim(.5,1.01) +
+  ylim(-1.5,1.5) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  theme_bw() + 
+  labs(title = "PSIS diagnostic plot")
+```
+if the points are above zero = elpd loo of WB is greater than elpd loo of SB
+
+# MODEL COMPARISON- all participants 
+
+When we have multiple participants:
+- fit each model for each participant (subset for all participants and fit SB and WB to the data)
+- do model comparison on SB and WB for each participant
+- summarise the results in a confusion matrix or see how many participants belong to (fit best) each of the models
+
+```{r function: model comparison}
+compare <- function(fit1 = fit2SB, fit2 = fit2WB, id){
+  # Simple Bayes
+  Loo_SB <- fit1$loo(save_psis = TRUE, cores = 4)
+
+  # Weighted Bayes
+  Loo_WB <- fit2$loo(save_psis = TRUE, cores = 4)
+  
+  # model weights
+  temp <- loo_model_weights(list(Loo_SB, Loo_WB))
+  
+  df <- tibble(ID = id, SimpleBayes = temp[1], WeightedBayes = temp[2])
+  
+  return(df)
+}
+```
+
+```{r loop through participants}
+# there is no participant 33 
+# run it from participant 1 to 32 and then again from 34 to 45. append to df
+start_time <- Sys.time()
+
+MC_data <- tibble()
+for (p in 1:32){
+  # prepare data
+  data <- prep_data(cogsci_data, p)
+  # fit to simple bayes
+  fit2SB_temp <- fit_model(data, model = "SB", clean = F)
+  # fit to weighted bayes
+  fit2WB_temp <- fit_model(data, model = "WB", clean = F)
+  # compare models
+  temp <- compare(fit1 = fit2SB_temp, fit2 = fit2WB_temp, p)
+  # append to df
+  MC_data <- rbind(MC_data, temp)
+  #MC_data <- comparison
+}
+
+for (p in 34:45){
+  # prepare data
+  data <- prep_data(cogsci_data, p)
+  # fit to simple bayes
+  fit2SB_temp <- fit_model(data, model = "SB", clean = F)
+  # fit to weighted bayes
+  fit2WB_temp <- fit_model(data, model = "WB", clean = F)
+  # compare models
+  temp <- compare(fit1 = fit2SB_temp, fit2 = fit2WB_temp, p)
+  # append to df
+  MC_data <- rbind(MC_data, temp)
+  #MC_data <- comparison
+}
+
+end_time <- Sys.time()
+processing_time <- end_time - start_time
+```
+
+```{r count and plot}
+MC_data <- MC_data %>% mutate(
+  best_model = factor(ifelse(SimpleBayes > WeightedBayes,"Simple","Weighted"))
+)
+
+# count
+table(MC_data$best_model) # 44 out of 44
+```
+
+
+```{r plot}
+# code requires running fit_model with clean = T
+p1 <- cogsci_data %>% 
+    filter(ID == 22)
+p1$trial <- seq(1:70)
+
+# find posterior predictions
+p1_postpreds_SB <- draws_SB[,76:145] %>% 
+  t() %>% 
+  as_tibble() %>% 
+  inv_logit_scaled()
+p1_postpreds_SB <- round(p1_postpreds_SB*9,0)
+
+p1$preds_sum_SB <- rowSums(p1_postpreds_SB)
+
+
+# calculate average model predictions (across 6000 simulations) 
+p1 <- mutate(p1, Predictions_SB = round(preds_sum_SB/6000), 0)
+
+# prepare data for plotting
+p1_plotting_SB <- p1 %>% 
+  dplyr::select(trial, SecondRating, Predictions_SB) %>% tidyr::gather(Condition, Rating, SecondRating, Predictions_SB)
+p1_plotting_SB$Rating <- as.numeric(p1_plotting_SB$Rating)
+
+
+# Plots
+## Histogram
+p1_plotting_SB %>% 
+  ggplot(aes(x = Rating, fill = Condition)) +
+  geom_histogram(position = "identity", stat = "count", alpha = 0.6) +
+  theme_bw() +
+  labs(title = "Model accuracy: Simple Bayes") +
+  theme(legend.position = "none") +
+
+## scatterplot
+p1_plotting_SB %>% 
+  ggplot(aes(x = trial, y = Rating, color = Condition)) +
+  geom_jitter() +
+  theme_bw() #+
+  labs(title = "Model accuracy: Simple Bayes")
+
+```
+
+```{r plot}
+# code requires running fit_model with clean = T
+
+# find posterior predictions
+p1_postpreds_WB <- draws_WB[,82:151] %>% 
+  t() %>% 
+  as_tibble() %>% 
+  inv_logit_scaled()
+
+p1_postpreds_WB <- round(p1_postpreds_WB*9,0)
+
+p1$preds_sum_WB <- rowSums(p1_postpreds_WB)
+
+# calculate average model predictions (across 6000 simulations) 
+p1 <- mutate(p1, Predictions_WB = round(preds_sum_WB/6000), 0)
+
+
+# prepare data for plotting
+p1_plotting_WB <- p1 %>% 
+  dplyr::select(trial, SecondRating, Predictions_WB) %>% tidyr::gather(Condition, Rating, SecondRating, Predictions_WB)
+p1_plotting_WB$Rating <- as.numeric(p1_plotting_WB$Rating)
+
+
+# Plots
+## Histogram
+p1_plotting_WB %>% 
+  ggplot(aes(x = Rating, fill = Condition)) +
+  geom_histogram(position = "identity", stat = "count", alpha = 0.6) +
+  theme_bw() +
+  labs(title = "Model accuracy: Weighted Bayes") +
+  theme(legend.position = "none") +
+
+## scatterplot
+p1_plotting_WB %>% 
+  ggplot(aes(x = trial, y = Rating, color = Condition)) +
+  geom_jitter() +
+  theme_bw() #+
+  labs(title = "Model accuracy: Weighted Bayes")
+
+```
