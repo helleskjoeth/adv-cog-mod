@@ -89,7 +89,6 @@ cogsci_data %>%
 
 # IMPORT MODELS
 ```{r import model}
-
 # Simple Bayes model
 file_SB <- file.path("stan/SB_model.stan")
 model_SB <- cmdstan_model(file_SB, 
@@ -232,11 +231,11 @@ draws_SB %>% mutate(
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#36802d") + 
-  geom_vline(xintercept = 5, linetype="dotted", 
+  geom_vline(xintercept = 6, linetype="dotted", 
                 color = "red", size=1) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) +
   theme_bw()+ 
-  labs(title = "SB: participant 1, trial 1, faceID 10") +
+  labs(title = "SB: participant 22, trial 1, faceID 10") +
 
 
 # check participant 1, trial 2 - WORSE FIT
@@ -247,11 +246,11 @@ draws_SB %>% mutate(
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#36802d") + 
-  geom_vline(xintercept = 6, linetype="dotted", 
+  geom_vline(xintercept = 5, linetype="dotted", 
                 color = "red", size= 1) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
   theme_bw()+ 
-  labs(title = "SB: participant 1, trial 2, faceID 11") +
+  labs(title = "SB: participant 22, trial 2, faceID 11") +
 
 
 # check participant 1, trial 10
@@ -262,11 +261,11 @@ draws_SB %>% mutate(
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#36802d") + 
-  geom_vline(xintercept = 6, linetype="dotted", 
+  geom_vline(xintercept = 7, linetype="dotted", 
                 color = "red", size= 1) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
   theme_bw()+ 
-  labs(title = "SB: participant 1, trial 10, faceID 19") + # goes up to 9
+  labs(title = "SB: participant 22, trial 10, faceID 19") + # goes up to 9
 
 # check participant 1, trial 11
 draws_SB %>% mutate(
@@ -276,11 +275,11 @@ draws_SB %>% mutate(
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#36802d") + 
-  geom_vline(xintercept = 4, linetype="dotted", 
+  geom_vline(xintercept = 3, linetype="dotted", 
                 color = "red", size= 1) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
   theme_bw()+ 
-  labs(title = "SB: participant 1, trial 13, faceID 22") 
+  labs(title = "SB: participant 22, trial 13, faceID 21") 
 
 ```
 Checking how many times predictions were out of bounds.
@@ -470,11 +469,11 @@ draws_WB %>% mutate(
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#77ab59") + 
-  geom_vline(xintercept = 5, linetype="dotted", 
+  geom_vline(xintercept = 6, linetype="dotted", 
                 color = "red", size=1) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) +
   theme_bw()+ 
-  labs(title = "WB: participant 1, trial 1, face ID 10") +
+  labs(title = "WB: participant 22, trial 1, face ID 10") +
 
 
 # check participant 1, trial 2 - WORSE FIT
@@ -485,11 +484,11 @@ draws_WB %>% mutate(
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#77ab59") + 
-  geom_vline(xintercept = 6, linetype="dotted", 
+  geom_vline(xintercept = 5, linetype="dotted", 
                 color = "red", size= 1) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
   theme_bw()+ 
-  labs(title = "WB: participant 1, trial 2, face ID 11") +
+  labs(title = "WB: participant 22, trial 2, face ID 11") +
 
 draws_WB %>% mutate(
   predictions = round(inv_logit_scaled(`post_preds[10]`)*9, 0), 
@@ -498,11 +497,11 @@ draws_WB %>% mutate(
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#77ab59") + 
-  geom_vline(xintercept = 6, linetype="dotted", 
+  geom_vline(xintercept = 7, linetype="dotted", 
                 color = "red", size= 1) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
   theme_bw()+ 
-  labs(title = "WB: participant 1, trial 10, faceID 19") +
+  labs(title = "WB: participant 22, trial 10, faceID 19") +
 
 draws_WB %>% mutate(
   predictions = round(inv_logit_scaled(`post_preds[13]`)*9, 0),
@@ -511,11 +510,11 @@ draws_WB %>% mutate(
   ggplot() + 
   aes(predictions) + 
   geom_histogram(fill = "#77ab59") + 
-  geom_vline(xintercept = 4, linetype="dotted", 
+  geom_vline(xintercept = 3, linetype="dotted", 
                 color = "red", size= 1) +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 9)) + 
   theme_bw()+ 
-  labs(title = "WB: participant 1, trial 13, faceID 22")
+  labs(title = "WB: participant 22, trial 13, faceID 21")
 
 
 
@@ -532,7 +531,7 @@ mean(greater_WB$n) # 41.3871
 mean(lesser_WB$n) # 37.26667
 37.26667/6000*100 # 0.62%
 
-0.699785 + 0.6211112 # 1.320896 0 1.32 %
+0.699785 + 0.6211112 # 1.320896 ~ 1.32 %
 ```
 
 
@@ -632,39 +631,95 @@ processing_time <- end_time - start_time
 ```
 
 ```{r count and plot}
-
-hist(MC_data$SimpleBayes)
-hist(MC_data$WeightedBayes)
-
 MC_data <- MC_data %>% mutate(
   best_model = factor(ifelse(SimpleBayes > WeightedBayes,"Simple","Weighted"))
 )
 
 # count
-table(MC_data$best_model)
-
-# df <- gather(by_year_percentage, key = measure, value = Rate, 
-# c("deathpercentage", "tamponadepercentage", "protaminepercentage"))
-# 
-# ggplot(df, aes(x=arrivaldate, y = Rate, group = measure, colour = measure)) + 
-# geom_line()
-
-# bar plot
-MC_data %>% 
-  ggplot(aes(x = best_model, fill = best_model)) +
-  geom_bar(alpha = 0.8) +
-  theme_bw() +
-  labs(x = "Best model") +
-  scale_fill_discrete(name = "")
-
-# density plot
-MC_data %>% 
-  ggplot() +
-  geom_density(aes(WeightedBayes), alpha = 0.3) +
-  geom_density(aes(SimpleBayes), alpha=0.5) +
-  labs(x = "Model weight") +
-  theme_bw() #+
-  #scale_fill_manual(values = c('Weighted' = 'blue', 'Simple' = 'red')) +
-  #scale_fill_discrete(name = "")
+table(MC_data$best_model) # 44 out of 44
 ```
 
+
+```{r plot}
+# code requires running fit_model with clean = T
+p1 <- cogsci_data %>% 
+    filter(ID == 22)
+p1$trial <- seq(1:70)
+
+# find posterior predictions
+p1_postpreds_SB <- draws_SB[,76:145] %>% 
+  t() %>% 
+  as_tibble() %>% 
+  inv_logit_scaled()
+p1_postpreds_SB <- round(p1_postpreds_SB*9,0)
+
+p1$preds_sum_SB <- rowSums(p1_postpreds_SB)
+
+
+# calculate average model predictions (across 6000 simulations) 
+p1 <- mutate(p1, Predictions_SB = round(preds_sum_SB/6000), 0)
+
+# prepare data for plotting
+p1_plotting_SB <- p1 %>% 
+  dplyr::select(trial, SecondRating, Predictions_SB) %>% tidyr::gather(Condition, Rating, SecondRating, Predictions_SB)
+p1_plotting_SB$Rating <- as.numeric(p1_plotting_SB$Rating)
+
+
+# Plots
+## Histogram
+p1_plotting_SB %>% 
+  ggplot(aes(x = Rating, fill = Condition)) +
+  geom_histogram(position = "identity", stat = "count", alpha = 0.6) +
+  theme_bw() +
+  labs(title = "Model accuracy: Simple Bayes") +
+  theme(legend.position = "none") +
+
+## scatterplot
+p1_plotting_SB %>% 
+  ggplot(aes(x = trial, y = Rating, color = Condition)) +
+  geom_jitter() +
+  theme_bw() #+
+  labs(title = "Model accuracy: Simple Bayes")
+
+```
+
+```{r plot}
+# code requires running fit_model with clean = T
+
+# find posterior predictions
+p1_postpreds_WB <- draws_WB[,82:151] %>% 
+  t() %>% 
+  as_tibble() %>% 
+  inv_logit_scaled()
+
+p1_postpreds_WB <- round(p1_postpreds_WB*9,0)
+
+p1$preds_sum_WB <- rowSums(p1_postpreds_WB)
+
+# calculate average model predictions (across 6000 simulations) 
+p1 <- mutate(p1, Predictions_WB = round(preds_sum_WB/6000), 0)
+
+
+# prepare data for plotting
+p1_plotting_WB <- p1 %>% 
+  dplyr::select(trial, SecondRating, Predictions_WB) %>% tidyr::gather(Condition, Rating, SecondRating, Predictions_WB)
+p1_plotting_WB$Rating <- as.numeric(p1_plotting_WB$Rating)
+
+
+# Plots
+## Histogram
+p1_plotting_WB %>% 
+  ggplot(aes(x = Rating, fill = Condition)) +
+  geom_histogram(position = "identity", stat = "count", alpha = 0.6) +
+  theme_bw() +
+  labs(title = "Model accuracy: Weighted Bayes") +
+  theme(legend.position = "none") +
+
+## scatterplot
+p1_plotting_WB %>% 
+  ggplot(aes(x = trial, y = Rating, color = Condition)) +
+  geom_jitter() +
+  theme_bw() #+
+  labs(title = "Model accuracy: Weighted Bayes")
+
+```
