@@ -186,9 +186,9 @@ draws_SB %>% mutate(
   ) %>% 
   ggplot() + 
   geom_histogram(aes(preds)) +
-  labs(title = "Post. predictions for trial 1") +
-  geom_vline(xintercept = 6, linetype="dotted", # get actual answer from sim. data 
-                color = "red", size= 1) +
+  labs(title = "Post. predictions for trial 1",
+       x = 'rating') +
+  geom_point(x = 6, y = 0, color = "red", shape = 17, size = 3) +
   theme_classic() + 
   labs(x_axis = 'rating2 predictions') +
   scale_x_continuous(breaks = scales::pretty_breaks(n = 2)) +
@@ -199,9 +199,9 @@ draws_SB %>% mutate(
   ) %>% 
   ggplot() + 
   geom_histogram(aes(preds)) + 
-  labs(title = "Post. predictions for trial 9") + 
-  geom_vline(xintercept = 4, linetype="dotted", 
-                color = "red", size= 1) +
+  labs(title = "Post. predictions for trial 9",
+       x = 'rating') + 
+  geom_point(x = 4, y = 0, color = "red", shape = 17, size = 3) +
   theme_classic() + 
   scale_x_continuous(breaks = scales::pretty_breaks(n = 2)) +
   
@@ -211,11 +211,11 @@ draws_SB %>% mutate(
   ) %>% 
   ggplot() + 
   geom_histogram(aes(preds)) + 
-  labs(title = "Post. predictions for trial 17") + 
-  geom_vline(xintercept = 4, linetype="dotted", 
-                color = "red", size= 1) +
+  labs(title = "Post. predictions for trial 17",
+       x = 'rating') + 
+  geom_point(x = 4, y = 0, color = "red", shape = 17, size = 3) +
   theme_classic() + 
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 2))  
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 2)) +
     
     
   draws_SB %>% mutate(
@@ -223,9 +223,9 @@ draws_SB %>% mutate(
   ) %>% 
   ggplot() + 
   geom_histogram(aes(preds)) + 
-  labs(title = "Post. predictions for trial 36") + 
-  geom_vline(xintercept = 6, linetype="dotted", 
-                color = "red", size= 1) +
+  labs(title = "Post. predictions for trial 36",
+       x = 'rating') + 
+  geom_point(x = 6, y = 0, color = "red", shape = 17, size = 3) +
   theme_classic() + 
   scale_x_continuous(breaks = scales::pretty_breaks(n = 2))
 ```
@@ -415,26 +415,56 @@ ggplot(draws_WB) +
 
 # post preds plot
 ```{r}
-# not a lot of variance in the post preds. does that mean that the model is very certain?
-draws_WB %>% mutate(
-  preds = round(inv_logit_scaled(`post_preds[1]`)*9, 0)
+# not a lot of variance in the post preds.
+  # trial 1, 9, 17, 36
+draws_WB %>%  mutate(
+  preds = round(inv_logit_scaled(`post_preds[1]`)*9, 0),
+  preds = ifelse(preds > 8, 8, ifelse(preds < 1, 1, preds)) 
   ) %>% 
   ggplot() + 
   geom_histogram(aes(preds)) +
-  labs(title = "Post. predictions for trial 1") +
-  geom_vline(xintercept = 7, linetype="dotted", 
-                color = "red", size= 1) +
+  labs(title = "Post. predictions for trial 1",
+       x = 'rating') +
+  geom_point(x = 8, y = 0, color = "red", shape = 17, size = 3) +
   theme_classic() + 
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 4))+ 
-draws_WB %>% mutate(
-  preds = round(inv_logit_scaled(`post_preds[2]`)*9, 0),
-  preds = ifelse(preds > 8, 8, ifelse(preds < 1, 1, preds))
+  labs(x_axis = 'rating2 predictions') +
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 3)) +
+  
+draws_WB %>%  mutate(
+  preds = round(inv_logit_scaled(`post_preds[9]`)*9, 0)
   ) %>% 
   ggplot() + 
-  geom_histogram(aes(preds)) + 
-  labs(title = "Post. predictions for trial 2") + 
-  geom_vline(xintercept = 2, linetype="dotted", 
-                color = "red", size= 1) +
+  geom_histogram(aes(preds)) +
+  labs(title = "Post. predictions for trial 9",
+       x = 'rating') +
+  geom_point(x = 5, y = 0, color = "red", shape = 17, size = 3) +
   theme_classic() + 
-  scale_x_continuous(breaks = scales::pretty_breaks(n = 5))
+  labs(x_axis = 'rating2 predictions') +
+  #scale_x_continuous(breaks = scales::pretty_breaks(n = 4)) +
+  
+draws_WB %>%  mutate(
+  preds = round(inv_logit_scaled(`post_preds[17]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) +
+  labs(title = "Post. predictions for trial 17",
+       x = 'rating') +
+  geom_point(x = 6, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  labs(x_axis = 'rating2 predictions') +
+  
+draws_WB %>%  mutate(
+  preds = round(inv_logit_scaled(`post_preds[36]`)*9, 0)
+  ) %>% 
+  ggplot() + 
+  geom_histogram(aes(preds)) +
+  labs(title = "Post. predictions for trial 36",
+       x = 'rating') +
+  geom_point(x = 8, y = 0, color = "red", shape = 17, size = 3) +
+  theme_classic() + 
+  labs(x_axis = 'rating2 predictions') + 
+  scale_x_continuous(breaks = scales::pretty_breaks(n = 3))
+
+  
+
 ```
